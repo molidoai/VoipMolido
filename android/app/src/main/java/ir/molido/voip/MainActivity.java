@@ -50,6 +50,7 @@ public final class MainActivity extends Activity {
     private EditText dialInput;
     private boolean darkMode;
     private SharedPreferences prefs;
+    private SecureStore secureStore;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -64,6 +65,7 @@ public final class MainActivity extends Activity {
     public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        secureStore = new SecureStore(this);
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
@@ -130,10 +132,17 @@ public final class MainActivity extends Activity {
         connectionStatus = new TextView(this);
         String serverReady = prefs.getString("server", "");
         String extReady = prefs.getString("extension", "");
-        boolean profileReady = !serverReady.isEmpty() && !extReady.isEmpty();
+        String userReady = prefs.getString("sip_username", "");
+        boolean passwordReady = hasStoredSipPassword();
+        boolean profileReady =
+                !serverReady.isEmpty()
+                && !extReady.isEmpty()
+                && !userReady.isEmpty()
+                && passwordReady;
+
         connectionStatus.setText(profileReady
-                ? "●  پروفایل آماده • SIP هنوز متصل نشده"
-                : "●  تنظیمات اتصال ناقص");
+                ? "●  Secure SIP profile ready • Registration در فاز بعد"
+                : "●  تنظیمات Secure SIP ناقص");
         connectionStatus.setTextSize(12f);
         connectionStatus.setTextColor(profileReady
                 ? Color.rgb(16, 185, 129)
@@ -573,6 +582,21 @@ public final class MainActivity extends Activity {
                 prefs.getString("extension", ""));
         extension.setInputType(InputType.TYPE_CLASS_PHONE);
 
+        EditText sipUsername = field("SIP Username",
+                prefs.getString("sip_username", ""));
+
+        EditText sipPassword = field("SIP Password",
+                "");
+        sipPassword.setInputType(
+                InputType.TYPE_CLASS_TEXT |
+                InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        sipPassword.setHint(hasStoredSipPassword()
+                ? "رمز SIP ذخیره شده • برای تغییر، رمز جدید را وارد کنید"
+                : "SIP Password");
+
+        EditText transport = field("Transport: TLS / TCP / UDP",
+                prefs.getString("sip_transport", "TLS"));
+
         EditText displayName = field("نام نمایشی",
                 prefs.getString("display_name", ""));
 
@@ -582,6 +606,9 @@ public final class MainActivity extends Activity {
         form.addView(server);
         form.addView(tenant);
         form.addView(extension);
+        form.addView(sipUsername);
+        form.addView(sipPassword);
+        form.addView(transport);
         form.addView(displayName);
         form.addView(language);
 
@@ -616,20 +643,52 @@ public final class MainActivity extends Activity {
                     }
                 }
 
+                String transportValue =
+                        transport.getText().toString().trim().toUpperCase(java.util.Locale.ROOT);
+
+                if (!transportValue.equals("TLS")
+                        && !transportValue.equals("TCP")
+                        && !transportValue.equals("UDP")) {
+                    transport.setError("فقط TLS، TCP یا UDP مجاز است.");
+                    return;
+                }
+
+                String newPassword = sipPassword.getText().toString();
+
+                try {
+                    if (!newPassword.isEmpty()) {
+                        secureStore.putSecret("sip_password", newPassword);
+                    }
+                } catch (Exception e) {
+                    showToast("ذخیره امن رمز SIP ناموفق بود.");
+                    return;
+                }
+
                 prefs.edit()
                         .putString("server", serverValue)
                         .putString("tenant", tenant.getText().toString().trim())
                         .putString("extension", extension.getText().toString().trim())
+                        .putString("sip_username", sipUsername.getText().toString().trim())
+                        .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
                         .putString("language", language.getText().toString().trim())
                         .apply();
 
-                showToast("تنظیمات ذخیره شد.");
+                showToast("تنظیمات و Credential امن ذخیره شد.");
                 ad.dismiss();
             });
         });
 
         ad.show();
+    }
+
+    private boolean hasStoredSipPassword() {
+        try {
+            String value = secureStore.getSecret("sip_password");
+            return value != null && !value.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private EditText field(String hint, String value) {

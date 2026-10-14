@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'ir.molido.voip'
     compileSdk 35
-    defaultConfig { applicationId 'ir.molido.voip'; minSdk 26; targetSdk 35; versionCode 11; versionName '0.2.1' }
+    defaultConfig { applicationId 'ir.molido.voip'; minSdk 26; targetSdk 35; versionCode 12; versionName '0.2.2' }
     signingConfigs {
         release {
             def ks = System.getenv('MOLIDO_KEYSTORE_PATH')
@@ -28,5 +28,6 @@ android {
 
 
 dependencies {
+    implementation 'org.linphone:linphone-sdk-android:5.5.15'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }
