@@ -1,12 +1,15 @@
 package ir.molido.voip;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -41,6 +44,7 @@ public final class MainActivity extends Activity {
     private static final String RELEASES_API =
             "https://api.github.com/repos/molidoai/VoipMolido/releases/latest";
     private static final String PREFS = "molido_voip_settings";
+    private static final int REQ_MIC = 4102;
 
     private WebView web;
     private TextView updateStatus;
@@ -53,6 +57,13 @@ public final class MainActivity extends Activity {
     private SecureStore secureStore;
     private SipRegistrationManager sipManager;
     private Button registerButton;
+    private Button callButton;
+    private Button hangupButton;
+    private Button muteButton;
+    private Button speakerButton;
+    private TextView callStatus;
+    private String pendingDialNumber = "";
+    private boolean speakerEnabled = false;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -71,6 +82,9 @@ public final class MainActivity extends Activity {
         sipManager = new SipRegistrationManager(this,
                 (regState, detail, success) -> runOnUiThread(() ->
                         updateSipRegistrationUi(regState, detail, success)));
+        sipManager.setCallEventListener(
+                (callState, detail, active) -> runOnUiThread(() ->
+                        updateCallUi(callState, detail, active)));
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
@@ -247,18 +261,11 @@ public final class MainActivity extends Activity {
         callActions.setOrientation(LinearLayout.HORIZONTAL);
         callActions.setGravity(Gravity.CENTER);
 
-        Button callButton = new Button(this);
+        callButton = new Button(this);
         callButton.setText("تماس");
         callButton.setAllCaps(false);
         stylePrimaryButton(callButton);
-        callButton.setOnClickListener(v -> {
-            String number = dialInput.getText().toString().trim();
-            if (number.isEmpty()) {
-                showToast("شماره یا داخلی را وارد کنید.");
-            } else {
-                showToast("SIP در فاز بعدی فعال می‌شود: " + number);
-            }
-        });
+        callButton.setOnClickListener(v -> beginOutgoingCall());
 
         Button clearButton = new Button(this);
         clearButton.setText("پاک");
@@ -277,6 +284,76 @@ public final class MainActivity extends Activity {
         callActions.addView(clearButton, clearLp);
 
         dashboard.addView(callActions);
+
+        LinearLayout callCard = new LinearLayout(this);
+        callCard.setOrientation(LinearLayout.VERTICAL);
+        callCard.setPadding(dp(14), dp(12), dp(14), dp(12));
+        callCard.setBackground(roundedBg(
+                darkMode ? "#1F2937" : "#FFFFFF",
+                18,
+                darkMode ? "#374151" : "#E5E7EB"));
+
+        callStatus = new TextView(this);
+        callStatus.setText("تماس فعال نیست");
+        callStatus.setTextSize(14f);
+        callStatus.setTypeface(Typeface.DEFAULT_BOLD);
+        callStatus.setTextColor(
+                darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
+        callCard.addView(callStatus);
+
+        LinearLayout liveControls = new LinearLayout(this);
+        liveControls.setOrientation(LinearLayout.HORIZONTAL);
+        liveControls.setGravity(Gravity.CENTER);
+        liveControls.setPadding(0, dp(8), 0, 0);
+
+        muteButton = new Button(this);
+        muteButton.setText("Mute");
+        muteButton.setAllCaps(false);
+        styleSecondaryButton(muteButton);
+        muteButton.setEnabled(false);
+        muteButton.setOnClickListener(v -> {
+            boolean muted = sipManager.toggleMute();
+            muteButton.setText(muted ? "Unmute" : "Mute");
+        });
+
+        speakerButton = new Button(this);
+        speakerButton.setText("Speaker");
+        speakerButton.setAllCaps(false);
+        styleSecondaryButton(speakerButton);
+        speakerButton.setEnabled(false);
+        speakerButton.setOnClickListener(v -> toggleSpeaker());
+
+        hangupButton = new Button(this);
+        hangupButton.setText("قطع تماس");
+        hangupButton.setAllCaps(false);
+        hangupButton.setTextColor(Color.WHITE);
+        hangupButton.setTypeface(Typeface.DEFAULT_BOLD);
+        hangupButton.setBackground(roundedBg("#DC2626", 16, null));
+        hangupButton.setEnabled(false);
+        hangupButton.setOnClickListener(v -> sipManager.terminateCall());
+
+        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp1.setMargins(0, 0, dp(4), 0);
+        liveControls.addView(muteButton, lp1);
+
+        LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp2.setMargins(dp(4), 0, dp(4), 0);
+        liveControls.addView(speakerButton, lp2);
+
+        LinearLayout.LayoutParams lp3 = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp3.setMargins(dp(4), 0, 0, 0);
+        liveControls.addView(hangupButton, lp3);
+
+        callCard.addView(liveControls);
+
+        LinearLayout.LayoutParams callCardLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        callCardLp.setMargins(0, dp(10), 0, 0);
+        dashboard.addView(callCard, callCardLp);
 
         LinearLayout quickActions = new LinearLayout(this);
         quickActions.setOrientation(LinearLayout.HORIZONTAL);
@@ -720,6 +797,144 @@ public final class MainActivity extends Activity {
         });
 
         ad.show();
+    }
+
+    private void beginOutgoingCall() {
+        String number = dialInput.getText().toString().trim();
+
+        if (number.isEmpty()) {
+            showToast("شماره یا داخلی را وارد کنید.");
+            return;
+        }
+
+        if (!sipManager.isRegistered()) {
+            showToast("ابتدا SIP را Register کنید.");
+            return;
+        }
+
+        if (sipManager.hasActiveCall()) {
+            showToast("یک تماس دیگر فعال است.");
+            return;
+        }
+
+        pendingDialNumber = number;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.RECORD_AUDIO},
+                    REQ_MIC);
+            return;
+        }
+
+        placeOutgoingCall(number);
+    }
+
+    private void placeOutgoingCall(String number) {
+        try {
+            callStatus.setText("Calling • " + number);
+            callButton.setEnabled(false);
+            sipManager.startOutgoingCall(number);
+        } catch (Exception e) {
+            callButton.setEnabled(true);
+            callStatus.setText("Failed • " + safeUiMessage(e.getMessage()));
+            showToast("شروع تماس ناموفق بود.");
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults) {
+
+        super.onRequestPermissionsResult(
+                requestCode, permissions, grantResults);
+
+        if (requestCode == REQ_MIC) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                String number = pendingDialNumber;
+                pendingDialNumber = "";
+                if (!number.isEmpty()) placeOutgoingCall(number);
+            } else {
+                pendingDialNumber = "";
+                showToast("برای تماس صوتی، اجازه میکروفن لازم است.");
+            }
+        }
+    }
+
+    private void updateCallUi(
+            String state,
+            String detail,
+            boolean active) {
+
+        String number = dialInput == null
+                ? ""
+                : dialInput.getText().toString().trim();
+
+        String text = state;
+        if (!number.isEmpty()
+                && ("Calling".equals(state)
+                || "Ringing".equals(state)
+                || "Connected".equals(state))) {
+            text += " • " + number;
+        }
+
+        String safeDetail = safeUiMessage(detail);
+        if (!safeDetail.isEmpty()
+                && !"INVITE sent".equals(safeDetail)) {
+            text += " • " + safeDetail;
+        }
+
+        callStatus.setText(text);
+
+        boolean controls = active
+                && !"Calling".equals(state)
+                && !"Ringing".equals(state);
+
+        hangupButton.setEnabled(active);
+        muteButton.setEnabled(controls);
+        speakerButton.setEnabled(controls);
+        callButton.setEnabled(!active);
+
+        if ("Ended".equals(state) || "Failed".equals(state)) {
+            muteButton.setText("Mute");
+            setSpeakerEnabled(false);
+            saveRecentOutgoingCall(number, state);
+        }
+    }
+
+    private void toggleSpeaker() {
+        setSpeakerEnabled(!speakerEnabled);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void setSpeakerEnabled(boolean enabled) {
+        speakerEnabled = enabled;
+        try {
+            AudioManager audio =
+                    (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (audio != null) {
+                audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                audio.setSpeakerphoneOn(enabled);
+            }
+        } catch (Exception ignored) {}
+
+        if (speakerButton != null) {
+            speakerButton.setText(enabled ? "Earpiece" : "Speaker");
+        }
+    }
+
+    private void saveRecentOutgoingCall(String number, String result) {
+        if (number == null || number.trim().isEmpty()) return;
+
+        prefs.edit()
+                .putString("last_call_number", number.trim())
+                .putString("last_call_result", result)
+                .putLong("last_call_time", System.currentTimeMillis())
+                .apply();
     }
 
     private boolean isSipProfileReady() {

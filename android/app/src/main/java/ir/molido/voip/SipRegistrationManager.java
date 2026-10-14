@@ -6,6 +6,7 @@ import org.linphone.core.Account;
 import org.linphone.core.AccountParams;
 import org.linphone.core.Address;
 import org.linphone.core.AuthInfo;
+import org.linphone.core.Call;
 import org.linphone.core.Core;
 import org.linphone.core.CoreListenerStub;
 import org.linphone.core.Factory;
@@ -17,12 +18,20 @@ public final class SipRegistrationManager {
         void onStateChanged(String state, String detail, boolean success);
     }
 
+    public interface CallEventListener {
+        void onCallStateChanged(String state, String detail, boolean active);
+    }
+
     private final Context appContext;
     private final Listener listener;
 
+    private CallEventListener callEventListener;
     private Core core;
     private Account account;
     private AuthInfo authInfo;
+    private Call currentCall;
+    private boolean registered;
+    private String registeredDomain = "";
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -35,12 +44,15 @@ public final class SipRegistrationManager {
             if (account != null && changedAccount != account) return;
 
             if (state == RegistrationState.Progress) {
+                registered = false;
                 notifyState("Connecting", safe(message), false);
             } else if (state == RegistrationState.Refreshing) {
-                notifyState("Refreshing", safe(message), true);
+                notifyState("Refreshing", safe(message), registered);
             } else if (state == RegistrationState.Ok) {
+                registered = true;
                 notifyState("Registered", safe(message), true);
             } else if (state == RegistrationState.Failed) {
+                registered = false;
                 String detail = safe(message);
                 try {
                     if (changedAccount.getErrorInfo() != null
@@ -48,13 +60,56 @@ public final class SipRegistrationManager {
                             && !changedAccount.getErrorInfo().getPhrase().isEmpty()) {
                         detail = changedAccount.getErrorInfo().getPhrase();
                     }
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) {}
                 notifyState("Failed", detail, false);
             } else if (state == RegistrationState.Cleared) {
+                registered = false;
                 notifyState("Offline", "Unregistered", false);
             } else {
                 notifyState("Offline", safe(message), false);
+            }
+        }
+
+        @Override
+        public void onCallStateChanged(
+                Core core,
+                Call call,
+                Call.State state,
+                String message) {
+
+            if (currentCall == null) {
+                if (state == Call.State.OutgoingInit
+                        || state == Call.State.OutgoingProgress
+                        || state == Call.State.OutgoingRinging
+                        || state == Call.State.OutgoingEarlyMedia
+                        || state == Call.State.Connected
+                        || state == Call.State.StreamsRunning) {
+                    currentCall = call;
+                }
+            }
+
+            if (currentCall != null && call != currentCall) return;
+
+            if (state == Call.State.OutgoingInit
+                    || state == Call.State.OutgoingProgress) {
+                notifyCall("Calling", safe(message), true);
+            } else if (state == Call.State.OutgoingRinging
+                    || state == Call.State.OutgoingEarlyMedia) {
+                notifyCall("Ringing", safe(message), true);
+            } else if (state == Call.State.Connected
+                    || state == Call.State.StreamsRunning) {
+                notifyCall("Connected", safe(message), true);
+            } else if (state == Call.State.Paused
+                    || state == Call.State.PausedByRemote) {
+                notifyCall("Paused", safe(message), true);
+            } else if (state == Call.State.Error) {
+                notifyCall("Failed", safe(message), false);
+                currentCall = null;
+            } else if (state == Call.State.End) {
+                notifyCall("Ended", safe(message), false);
+            } else if (state == Call.State.Released) {
+                notifyCall("Ended", "Call released", false);
+                currentCall = null;
             }
         }
     };
@@ -62,6 +117,10 @@ public final class SipRegistrationManager {
     public SipRegistrationManager(Context context, Listener listener) {
         this.appContext = context.getApplicationContext();
         this.listener = listener;
+    }
+
+    public void setCallEventListener(CallEventListener listener) {
+        this.callEventListener = listener;
     }
 
     public synchronized void register(
@@ -74,15 +133,9 @@ public final class SipRegistrationManager {
         username = clean(username);
         password = password == null ? "" : password;
 
-        if (registrar.isEmpty()) {
-            throw new IllegalArgumentException("SIP Registrar is required");
-        }
-        if (username.isEmpty()) {
-            throw new IllegalArgumentException("SIP Username is required");
-        }
-        if (password.isEmpty()) {
-            throw new IllegalArgumentException("SIP Password is required");
-        }
+        if (registrar.isEmpty()) throw new IllegalArgumentException("SIP Registrar is required");
+        if (username.isEmpty()) throw new IllegalArgumentException("SIP Username is required");
+        if (password.isEmpty()) throw new IllegalArgumentException("SIP Password is required");
 
         ensureCore();
         removeCurrentAccount();
@@ -100,23 +153,14 @@ public final class SipRegistrationManager {
             throw new IllegalArgumentException("Invalid SIP Registrar");
         }
 
-        String domain = serverAddress.getDomain();
-
+        registeredDomain = serverAddress.getDomain();
         Address identity = factory.createAddress(
-                "sip:" + username + "@" + domain);
+                "sip:" + username + "@" + registeredDomain);
 
-        if (identity == null) {
-            throw new IllegalArgumentException("Invalid SIP identity");
-        }
+        if (identity == null) throw new IllegalArgumentException("Invalid SIP identity");
 
         authInfo = factory.createAuthInfo(
-                username,
-                null,
-                password,
-                null,
-                null,
-                domain);
-
+                username, null, password, null, null, registeredDomain);
         core.addAuthInfo(authInfo);
 
         AccountParams params = core.createAccountParams();
@@ -124,7 +168,6 @@ public final class SipRegistrationManager {
         if (params.setIdentityAddress(identity) != 0) {
             throw new IllegalArgumentException("Invalid SIP identity");
         }
-
         if (params.setServerAddress(serverAddress) != 0) {
             throw new IllegalArgumentException("Invalid SIP server");
         }
@@ -134,7 +177,6 @@ public final class SipRegistrationManager {
         params.setUnregisterAtStopEnabled(true);
 
         account = core.createAccount(params);
-
         if (core.addAccount(account) != 0) {
             throw new IllegalStateException("Unable to add SIP account");
         }
@@ -143,8 +185,74 @@ public final class SipRegistrationManager {
         notifyState("Connecting", "Sending SIP REGISTER…", false);
     }
 
+    public synchronized boolean isRegistered() {
+        return registered;
+    }
+
+    public synchronized boolean hasActiveCall() {
+        return currentCall != null;
+    }
+
+    public synchronized void startOutgoingCall(String destination) throws Exception {
+        destination = clean(destination);
+
+        if (!registered || core == null || account == null) {
+            throw new IllegalStateException("SIP is not registered");
+        }
+        if (destination.isEmpty()) {
+            throw new IllegalArgumentException("Destination is empty");
+        }
+        if (currentCall != null) {
+            throw new IllegalStateException("Another call is already active");
+        }
+
+        String uri = destination;
+        if (!uri.startsWith("sip:") && !uri.startsWith("sips:")) {
+            if (uri.contains("@")) {
+                uri = "sip:" + uri;
+            } else {
+                if (registeredDomain.isEmpty()) {
+                    throw new IllegalStateException("SIP domain unavailable");
+                }
+                uri = "sip:" + uri + "@" + registeredDomain;
+            }
+        }
+
+        Address address = Factory.instance().createAddress(uri);
+        if (address == null) {
+            throw new IllegalArgumentException("Invalid destination");
+        }
+
+        Call call = core.inviteAddress(address);
+        if (call == null) {
+            throw new IllegalStateException("Unable to create outgoing call");
+        }
+
+        currentCall = call;
+        notifyCall("Calling", "INVITE sent", true);
+    }
+
+    public synchronized void terminateCall() {
+        if (currentCall == null) {
+            notifyCall("Ended", "No active call", false);
+            return;
+        }
+        int result = currentCall.terminate();
+        if (result != 0) {
+            notifyCall("Failed", "Unable to terminate call", true);
+        }
+    }
+
+    public synchronized boolean toggleMute() {
+        if (currentCall == null) return false;
+        boolean muted = !currentCall.getMicrophoneMuted();
+        currentCall.setMicrophoneMuted(muted);
+        return muted;
+    }
+
     public synchronized void unregister() {
         if (core == null || account == null) {
+            registered = false;
             notifyState("Offline", "No active SIP account", false);
             return;
         }
@@ -153,6 +261,7 @@ public final class SipRegistrationManager {
             AccountParams params = account.getParams().clone();
             params.setRegisterEnabled(false);
             account.setParams(params);
+            registered = false;
             notifyState("Offline", "Unregister requested", false);
         } catch (Exception e) {
             notifyState("Failed", "Unregister failed", false);
@@ -161,22 +270,26 @@ public final class SipRegistrationManager {
 
     public synchronized void shutdown() {
         try {
+            if (currentCall != null) currentCall.terminate();
+        } catch (Exception ignored) {}
+
+        try {
             if (account != null) {
                 AccountParams params = account.getParams().clone();
                 params.setRegisterEnabled(false);
                 account.setParams(params);
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
 
         try {
             if (core != null) {
                 core.removeListener(coreListener);
                 core.stop();
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
 
+        registered = false;
+        currentCall = null;
         account = null;
         authInfo = null;
         core = null;
@@ -197,19 +310,24 @@ public final class SipRegistrationManager {
         if (core == null) return;
 
         try {
+            if (currentCall != null) currentCall.terminate();
+        } catch (Exception ignored) {}
+
+        currentCall = null;
+        registered = false;
+
+        try {
             if (account != null) {
                 AccountParams params = account.getParams().clone();
                 params.setRegisterEnabled(false);
                 account.setParams(params);
                 core.removeAccount(account);
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
 
         try {
             core.clearAllAuthInfo();
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
 
         account = null;
         authInfo = null;
@@ -217,15 +335,18 @@ public final class SipRegistrationManager {
 
     private TransportType parseTransport(String value) {
         String v = clean(value).toUpperCase(java.util.Locale.ROOT);
-
         if ("UDP".equals(v)) return TransportType.Udp;
         if ("TCP".equals(v)) return TransportType.Tcp;
         return TransportType.Tls;
     }
 
     private void notifyState(String state, String detail, boolean success) {
-        if (listener != null) {
-            listener.onStateChanged(state, detail, success);
+        if (listener != null) listener.onStateChanged(state, detail, success);
+    }
+
+    private void notifyCall(String state, String detail, boolean active) {
+        if (callEventListener != null) {
+            callEventListener.onCallStateChanged(state, detail, active);
         }
     }
 
@@ -234,8 +355,8 @@ public final class SipRegistrationManager {
     }
 
     private static String safe(String value) {
-        if (value == null || value.trim().isEmpty()) return "No details";
-        String v = value.trim();
+        if (value == null || value.trim().isEmpty()) return "";
+        String v = value.replace('\n', ' ').replace('\r', ' ').trim();
         return v.length() > 180 ? v.substring(0, 180) : v;
     }
 }
