@@ -55,6 +55,8 @@ public final class MainActivity extends Activity {
     private WebView web;
     private TextView updateStatus;
     private Button updateButton;
+    private TextView updateCenterStatus;
+    private Button updateCenterButton;
     private TextView connectionStatus;
     private TextView extensionLabel;
     private EditText dialInput;
@@ -288,6 +290,46 @@ public final class MainActivity extends Activity {
                         ViewGroup.LayoutParams.WRAP_CONTENT);
         connectionLp.setMargins(dp(12), 0, dp(12), dp(8));
         root.addView(connectionRow, connectionLp);
+
+        LinearLayout updateCenter = new LinearLayout(this);
+        updateCenter.setOrientation(LinearLayout.HORIZONTAL);
+        updateCenter.setGravity(Gravity.CENTER_VERTICAL);
+        updateCenter.setPadding(dp(14), dp(8), dp(14), dp(8));
+        updateCenter.setBackground(
+                roundedBg(
+                        darkMode ? "#0F172A" : "#F8FAFC",
+                        16,
+                        darkMode ? "#334155" : "#E2E8F0"));
+
+        updateCenterStatus = new TextView(this);
+        updateCenterStatus.setText(
+                "نسخه نصب‌شده v" + BuildConfig.VERSION_NAME);
+        updateCenterStatus.setTextSize(12f);
+        updateCenterStatus.setTextColor(secondaryText);
+
+        updateCenter.addView(
+                updateCenterStatus,
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f));
+
+        updateCenterButton = new Button(this);
+        updateCenterButton.setText("بررسی");
+        updateCenterButton.setTextSize(11f);
+        updateCenterButton.setAllCaps(false);
+        styleSecondaryButton(updateCenterButton);
+        updateCenterButton.setOnClickListener(v ->
+                checkUpdates(true));
+
+        updateCenter.addView(updateCenterButton);
+
+        LinearLayout.LayoutParams updateCenterLp =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        updateCenterLp.setMargins(dp(12), 0, dp(12), dp(8));
+        root.addView(updateCenter, updateCenterLp);
 
         routeStatus = new TextView(this);
         routeStatus.setVisibility(
@@ -754,7 +796,7 @@ public final class MainActivity extends Activity {
         String[] items = {
                 "تنظیمات",
                 "اسکن QR",
-                "بررسی بروزرسانی",
+                "مرکز بروزرسانی",
                 "خدمات MOLIDO",
                 "درباره"
         };
@@ -767,7 +809,7 @@ public final class MainActivity extends Activity {
                     } else if (which == 1) {
                         startQrScan();
                     } else if (which == 2) {
-                        checkUpdates(true);
+                        showUpdateCenter();
                     } else if (which == 3) {
                         try {
                             startActivity(
@@ -784,6 +826,26 @@ public final class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showUpdateCenter() {
+        String message =
+                "نسخه نصب‌شده: v" + BuildConfig.VERSION_NAME
+                        + "
+
+"
+                        + "MOLIDO هنگام اجرای برنامه نسخه رسمی GitHub "
+                        + "را بررسی می‌کند. نصب بروزرسانی با تأیید کاربر "
+                        + "و از طریق APK رسمی انجام می‌شود.";
+
+        new AlertDialog.Builder(this)
+                .setTitle("مرکز بروزرسانی")
+                .setMessage(message)
+                .setNegativeButton("بستن", null)
+                .setPositiveButton(
+                        "بررسی الآن",
+                        (d, w) -> checkUpdates(true))
                 .show();
     }
 
@@ -4661,14 +4723,28 @@ public final class MainActivity extends Activity {
     }
 
     private void setStatus(String text) {
-        runOnUiThread(() -> updateStatus.setText(text));
+        runOnUiThread(() -> {
+            if (updateStatus != null) {
+                updateStatus.setText(text);
+            }
+            if (updateCenterStatus != null) {
+                updateCenterStatus.setText(text);
+            }
+        });
     }
 
     private void setUpdateBusy(boolean busy) {
         runOnUiThread(() -> {
-            updateButton.setEnabled(!busy);
-            updateButton.setText(
-                    busy ? "در حال بررسی..." : "بررسی بروزرسانی");
+            if (updateButton != null) {
+                updateButton.setEnabled(!busy);
+                updateButton.setText(
+                        busy ? "در حال بررسی..." : "بررسی بروزرسانی");
+            }
+            if (updateCenterButton != null) {
+                updateCenterButton.setEnabled(!busy);
+                updateCenterButton.setText(
+                        busy ? "..." : "بررسی");
+            }
         });
     }
 
