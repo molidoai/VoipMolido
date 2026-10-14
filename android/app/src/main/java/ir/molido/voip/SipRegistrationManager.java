@@ -7,6 +7,7 @@ import org.linphone.core.AccountParams;
 import org.linphone.core.Address;
 import org.linphone.core.AuthInfo;
 import org.linphone.core.Call;
+import org.linphone.core.CallStats;
 import org.linphone.core.Core;
 import org.linphone.core.CoreListenerStub;
 import org.linphone.core.Factory;
@@ -25,10 +26,18 @@ public final class SipRegistrationManager {
         void onCallStateChanged(String state, String detail, boolean active);
     }
 
+    public interface AudioQualityListener {
+        void onAudioQuality(String profile, int score, float lossPercent,
+                            float jitterMs, float rttMs,
+                            float downloadKbps, float uploadKbps);
+    }
+
     private final Context appContext;
     private final Listener listener;
 
     private CallEventListener callEventListener;
+    private AudioQualityListener audioQualityListener;
+    private SmartAudioController smartAudioController;
     private Core core;
     private Account account;
     private AuthInfo authInfo;
@@ -70,6 +79,17 @@ public final class SipRegistrationManager {
                 notifyState("Offline", "Unregistered", false);
             } else {
                 notifyState("Offline", safe(message), false);
+            }
+        }
+
+        @Override
+        public void onCallStatsUpdated(
+                Core core,
+                Call call,
+                CallStats stats) {
+            if (currentCall != null && call != currentCall) return;
+            if (smartAudioController != null) {
+                smartAudioController.onStats(stats);
             }
         }
 
@@ -124,6 +144,10 @@ public final class SipRegistrationManager {
 
     public void setCallEventListener(CallEventListener listener) {
         this.callEventListener = listener;
+    }
+
+    public void setAudioQualityListener(AudioQualityListener listener) {
+        this.audioQualityListener = listener;
     }
 
     public synchronized void register(
@@ -295,6 +319,7 @@ public final class SipRegistrationManager {
         currentCall = null;
         account = null;
         authInfo = null;
+        smartAudioController = null;
         core = null;
     }
 
@@ -308,6 +333,14 @@ public final class SipRegistrationManager {
         core.setUserAgent("MOLIDO-VOIP", BuildConfig.VERSION_NAME);
 
         configureHdAudio(core);
+        smartAudioController = new SmartAudioController(
+                core,
+                (profile, score, loss, jitter, rtt, down, up) -> {
+                    if (audioQualityListener != null) {
+                        audioQualityListener.onAudioQuality(
+                                profile, score, loss, jitter, rtt, down, up);
+                    }
+                });
         core.start();
     }
 

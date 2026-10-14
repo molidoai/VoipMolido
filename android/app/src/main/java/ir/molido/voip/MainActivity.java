@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private Button muteButton;
     private Button speakerButton;
     private TextView callStatus;
+    private TextView audioQuality;
     private String pendingDialNumber = "";
     private boolean speakerEnabled = false;
 
@@ -85,6 +86,10 @@ public final class MainActivity extends Activity {
         sipManager.setCallEventListener(
                 (callState, detail, active) -> runOnUiThread(() ->
                         updateCallUi(callState, detail, active)));
+        sipManager.setAudioQualityListener(
+                (profile, score, loss, jitter, rtt, down, up) ->
+                        runOnUiThread(() -> updateSmartAudioUi(
+                                profile, score, loss, jitter, rtt, down, up)));
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
@@ -301,8 +306,8 @@ public final class MainActivity extends Activity {
                 darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
         callCard.addView(callStatus);
 
-        TextView audioQuality = new TextView(this);
-        audioQuality.setText("HD Audio • Opus preferred • Adaptive network");
+        audioQuality = new TextView(this);
+        audioQuality.setText("Smart Audio • آماده پایش شبکه");
         audioQuality.setTextSize(11f);
         audioQuality.setTextColor(
                 darkMode ? Color.rgb(156, 163, 175) : Color.rgb(107, 114, 128));
@@ -912,6 +917,24 @@ public final class MainActivity extends Activity {
             setSpeakerEnabled(false);
             saveRecentOutgoingCall(number, state);
         }
+    }
+
+    private void updateSmartAudioUi(
+            String profile, int score, float loss, float jitter,
+            float rtt, float down, float up) {
+        if (audioQuality == null) return;
+        String label;
+        if ("EXCELLENT".equals(profile)) label = "عالی";
+        else if ("GOOD".equals(profile)) label = "خوب";
+        else if ("FAIR".equals(profile)) label = "متوسط";
+        else label = "حالت حفظ صدا";
+        audioQuality.setText(
+                "Smart Audio • " + label
+                + " • " + score + "/100"
+                + " • Loss " + String.format(java.util.Locale.US, "%.1f%%", loss)
+                + " • Jitter " + Math.round(jitter) + "ms"
+                + " • RTT " + Math.round(rtt) + "ms"
+                + " • ↓" + Math.round(down) + " ↑" + Math.round(up) + " kbps");
     }
 
     private void toggleSpeaker() {
