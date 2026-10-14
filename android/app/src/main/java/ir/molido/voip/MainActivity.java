@@ -70,6 +70,7 @@ public final class MainActivity extends Activity {
     private Button muteButton;
     private Button speakerButton;
     private TextView callStatus;
+    private TextView callPeerLabel;
     private TextView audioQuality;
     private TextView routeStatus;
     private MolidoConnectivityManager connectivityManager;
@@ -443,46 +444,73 @@ public final class MainActivity extends Activity {
 
         LinearLayout callCard = new LinearLayout(this);
         callCard.setOrientation(LinearLayout.VERTICAL);
-        callCard.setPadding(dp(14), dp(13), dp(14), dp(13));
+        callCard.setGravity(Gravity.CENTER_HORIZONTAL);
+        callCard.setPadding(dp(18), dp(18), dp(18), dp(18));
         callCard.setBackground(
                 roundedBg(
-                        darkMode ? "#1E293B" : "#FFFFFF",
-                        20,
+                        darkMode ? "#111827" : "#FFFFFF",
+                        26,
                         darkMode ? "#334155" : "#E2E8F0"));
 
+        TextView callAvatar = new TextView(this);
+        callAvatar.setText("☎");
+        callAvatar.setTextSize(30f);
+        callAvatar.setGravity(Gravity.CENTER);
+        callAvatar.setTextColor(Color.WHITE);
+        callAvatar.setBackground(
+                roundedBg("#2563EB", 44, null));
+
+        LinearLayout.LayoutParams avatarLp =
+                new LinearLayout.LayoutParams(dp(88), dp(88));
+        avatarLp.setMargins(0, 0, 0, dp(12));
+        callCard.addView(callAvatar, avatarLp);
+
+        callPeerLabel = new TextView(this);
+        callPeerLabel.setText("آماده تماس");
+        callPeerLabel.setTextSize(22f);
+        callPeerLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        callPeerLabel.setGravity(Gravity.CENTER);
+        callPeerLabel.setTextColor(primaryText);
+        callCard.addView(callPeerLabel);
+
         callStatus = new TextView(this);
-        callStatus.setText("آماده تماس");
-        callStatus.setTextSize(14f);
-        callStatus.setTypeface(Typeface.DEFAULT_BOLD);
-        callStatus.setTextColor(primaryText);
+        callStatus.setText("برای شروع، شماره یا داخلی را وارد کنید");
+        callStatus.setTextSize(13f);
+        callStatus.setGravity(Gravity.CENTER);
+        callStatus.setTextColor(secondaryText);
+        callStatus.setPadding(0, dp(4), 0, 0);
         callCard.addView(callStatus);
 
         audioQuality = new TextView(this);
         audioQuality.setText("کیفیت تماس • آماده");
         audioQuality.setTextSize(11f);
+        audioQuality.setGravity(Gravity.CENTER);
         audioQuality.setTextColor(secondaryText);
-        audioQuality.setPadding(0, dp(3), 0, dp(8));
+        audioQuality.setPadding(0, dp(4), 0, dp(12));
         callCard.addView(audioQuality);
 
         LinearLayout incoming = new LinearLayout(this);
         incoming.setOrientation(LinearLayout.HORIZONTAL);
+        incoming.setGravity(Gravity.CENTER);
 
         answerButton = new Button(this);
-        answerButton.setText("پاسخ");
+        answerButton.setText("☎  پاسخ");
         answerButton.setAllCaps(false);
         answerButton.setTextColor(Color.WHITE);
+        answerButton.setTypeface(Typeface.DEFAULT_BOLD);
         answerButton.setBackground(
-                roundedBg("#16A34A", 18, null));
+                roundedBg("#16A34A", 24, null));
         answerButton.setVisibility(android.view.View.GONE);
         answerButton.setEnabled(false);
         answerButton.setOnClickListener(v -> answerIncomingCall());
 
         rejectButton = new Button(this);
-        rejectButton.setText("رد");
+        rejectButton.setText("✕  رد");
         rejectButton.setAllCaps(false);
         rejectButton.setTextColor(Color.WHITE);
+        rejectButton.setTypeface(Typeface.DEFAULT_BOLD);
         rejectButton.setBackground(
-                roundedBg("#DC2626", 18, null));
+                roundedBg("#DC2626", 24, null));
         rejectButton.setVisibility(android.view.View.GONE);
         rejectButton.setEnabled(false);
         rejectButton.setOnClickListener(v ->
@@ -491,78 +519,83 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams i1 =
                 new LinearLayout.LayoutParams(
                         0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        dp(54),
                         1f);
-        i1.setMargins(0, 0, dp(4), 0);
+        i1.setMargins(0, 0, dp(6), 0);
 
         LinearLayout.LayoutParams i2 =
                 new LinearLayout.LayoutParams(
                         0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        dp(54),
                         1f);
-        i2.setMargins(dp(4), 0, 0, 0);
+        i2.setMargins(dp(6), 0, 0, 0);
 
         incoming.addView(answerButton, i1);
         incoming.addView(rejectButton, i2);
         callCard.addView(incoming);
 
-        LinearLayout activeControls = new LinearLayout(this);
-        activeControls.setOrientation(LinearLayout.HORIZONTAL);
-        activeControls.setPadding(0, dp(8), 0, 0);
+        LinearLayout callTools = new LinearLayout(this);
+        callTools.setOrientation(LinearLayout.HORIZONTAL);
+        callTools.setGravity(Gravity.CENTER);
+        callTools.setPadding(0, dp(10), 0, 0);
 
         muteButton = new Button(this);
-        muteButton.setText("بی‌صدا");
+        muteButton.setText("🎙\nبی‌صدا");
+        muteButton.setTextSize(11f);
         muteButton.setAllCaps(false);
         styleSecondaryButton(muteButton);
         muteButton.setEnabled(false);
         muteButton.setOnClickListener(v -> {
             boolean muted = sipManager.toggleMute();
-            muteButton.setText(muted ? "وصل صدا" : "بی‌صدا");
+            muteButton.setText(muted
+                    ? "🎙\nوصل صدا"
+                    : "🎙\nبی‌صدا");
         });
 
+        Button inCallKeypad = new Button(this);
+        inCallKeypad.setText("⌨\nصفحه کلید");
+        inCallKeypad.setTextSize(11f);
+        inCallKeypad.setAllCaps(false);
+        styleSecondaryButton(inCallKeypad);
+        inCallKeypad.setOnClickListener(v -> showCleanDialpad());
+
         speakerButton = new Button(this);
-        speakerButton.setText("بلندگو");
+        speakerButton.setText("🔊\nبلندگو");
+        speakerButton.setTextSize(11f);
         speakerButton.setAllCaps(false);
         styleSecondaryButton(speakerButton);
         speakerButton.setEnabled(false);
         speakerButton.setOnClickListener(v -> toggleSpeaker());
 
+        LinearLayout.LayoutParams toolLp =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(66),
+                        1f);
+        toolLp.setMargins(dp(4), 0, dp(4), 0);
+
+        callTools.addView(muteButton, toolLp);
+        callTools.addView(inCallKeypad, toolLp);
+        callTools.addView(speakerButton, toolLp);
+        callCard.addView(callTools);
+
         hangupButton = new Button(this);
-        hangupButton.setText("قطع");
+        hangupButton.setText("✕  قطع تماس");
         hangupButton.setAllCaps(false);
         hangupButton.setTextColor(Color.WHITE);
+        hangupButton.setTypeface(Typeface.DEFAULT_BOLD);
         hangupButton.setBackground(
-                roundedBg("#DC2626", 18, null));
+                roundedBg("#DC2626", 26, null));
         hangupButton.setEnabled(false);
         hangupButton.setOnClickListener(v ->
                 sipManager.terminateCall());
 
-        LinearLayout.LayoutParams c1 =
+        LinearLayout.LayoutParams hangLp =
                 new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        c1.setMargins(0, 0, dp(4), 0);
-
-        LinearLayout.LayoutParams c2 =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        c2.setMargins(dp(4), 0, dp(4), 0);
-
-        LinearLayout.LayoutParams c3 =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        c3.setMargins(dp(4), 0, 0, 0);
-
-        activeControls.addView(muteButton, c1);
-        activeControls.addView(speakerButton, c2);
-        activeControls.addView(hangupButton, c3);
-
-        callCard.addView(activeControls);
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(56));
+        hangLp.setMargins(0, dp(12), 0, 0);
+        callCard.addView(hangupButton, hangLp);
 
         LinearLayout.LayoutParams callCardLp =
                 new LinearLayout.LayoutParams(
@@ -3569,12 +3602,13 @@ public final class MainActivity extends Activity {
 
     private void placeOutgoingCall(String number) {
         try {
-            callStatus.setText("Calling • " + number);
+            callStatus.setText("در حال تماس…");
+            if (callPeerLabel != null) callPeerLabel.setText(number);
             callButton.setEnabled(false);
             sipManager.startOutgoingCall(number);
         } catch (Exception e) {
             callButton.setEnabled(true);
-            callStatus.setText("Failed • " + safeUiMessage(e.getMessage()));
+            callStatus.setText("برقراری تماس ناموفق بود");
             showToast("شروع تماس ناموفق بود.");
         }
     }
@@ -3640,74 +3674,138 @@ public final class MainActivity extends Activity {
                 ? ""
                 : dialInput.getText().toString().trim();
 
-        String text = state;
-        if (!number.isEmpty()
-                && ("Calling".equals(state)
-                || "Ringing".equals(state)
-                || "Connected".equals(state))) {
-            text += " • " + number;
-        }
-
         String safeDetail = safeUiMessage(detail);
-        if (!safeDetail.isEmpty()
-                && !"INVITE sent".equals(safeDetail)) {
-            text += " • " + safeDetail;
-        }
 
         if ("Incoming".equals(state)) {
             activeCallDirection = "IN";
-            activeCallPeer = safeDetail.isEmpty() ? "تماس ورودی" : safeDetail;
+            activeCallPeer = safeDetail.isEmpty()
+                    ? "تماس ورودی"
+                    : safeDetail;
             activeCallConnected = false;
             activeCallStartedAt = System.currentTimeMillis();
-        } else if ("Calling".equals(state)) {
+
+        } else if ("Calling".equals(state)
+                || "Ringing".equals(state)) {
             activeCallDirection = "OUT";
             activeCallPeer = number;
             activeCallConnected = false;
-            activeCallStartedAt = System.currentTimeMillis();
+
+            if (activeCallStartedAt == 0L) {
+                activeCallStartedAt = System.currentTimeMillis();
+            }
+
         } else if ("Connected".equals(state)) {
             activeCallConnected = true;
+
             if (activeCallStartedAt == 0L) {
                 activeCallStartedAt = System.currentTimeMillis();
             }
         }
 
-        if ("Incoming".equals(state)) {
-            text = "تماس ورودی" + (safeDetail.isEmpty() ? "" : " • " + safeDetail);
+        String peer = activeCallPeer;
+        if (peer == null || peer.trim().isEmpty()) {
+            peer = number;
         }
 
-        callStatus.setText(text);
+        if (callPeerLabel != null) {
+            if ("Incoming".equals(state)) {
+                callPeerLabel.setText(
+                        peer.isEmpty() ? "تماس ورودی" : peer);
+            } else if ("Calling".equals(state)
+                    || "Ringing".equals(state)
+                    || "Connected".equals(state)) {
+                callPeerLabel.setText(
+                        peer.isEmpty() ? "تماس" : peer);
+            } else if ("Ended".equals(state)) {
+                callPeerLabel.setText("تماس پایان یافت");
+            } else if ("Failed".equals(state)) {
+                callPeerLabel.setText("تماس ناموفق");
+            } else {
+                callPeerLabel.setText("آماده تماس");
+            }
+        }
+
+        String humanState;
+        if ("Incoming".equals(state)) {
+            humanState = "تماس ورودی";
+        } else if ("Calling".equals(state)) {
+            humanState = "در حال تماس…";
+        } else if ("Ringing".equals(state)) {
+            humanState = "در حال زنگ خوردن…";
+        } else if ("Connected".equals(state)) {
+            humanState = "متصل";
+        } else if ("Ended".equals(state)) {
+            humanState = "پایان تماس";
+        } else if ("Failed".equals(state)) {
+            humanState = "برقراری تماس ناموفق بود";
+        } else {
+            humanState = state == null ? "" : state;
+        }
+
+        if (callStatus != null) {
+            callStatus.setText(humanState);
+        }
 
         boolean incoming = "Incoming".equals(state);
+
         if (answerButton != null) {
-            answerButton.setVisibility(incoming ? android.view.View.VISIBLE : android.view.View.GONE);
+            answerButton.setVisibility(
+                    incoming
+                            ? android.view.View.VISIBLE
+                            : android.view.View.GONE);
             answerButton.setEnabled(incoming);
         }
+
         if (rejectButton != null) {
-            rejectButton.setVisibility(incoming ? android.view.View.VISIBLE : android.view.View.GONE);
+            rejectButton.setVisibility(
+                    incoming
+                            ? android.view.View.VISIBLE
+                            : android.view.View.GONE);
             rejectButton.setEnabled(incoming);
         }
 
-        boolean controls = active
-                && !incoming
-                && !"Calling".equals(state)
-                && !"Ringing".equals(state);
+        boolean controls =
+                active
+                        && !incoming
+                        && !"Calling".equals(state)
+                        && !"Ringing".equals(state);
 
-        hangupButton.setEnabled(active && !"Incoming".equals(state));
-        muteButton.setEnabled(controls);
-        speakerButton.setEnabled(controls);
-        callButton.setEnabled(!active);
+        if (hangupButton != null) {
+            hangupButton.setEnabled(
+                    active && !"Incoming".equals(state));
+        }
 
-        if ("Ended".equals(state) || "Failed".equals(state)) {
-            muteButton.setText("Mute");
+        if (muteButton != null) {
+            muteButton.setEnabled(controls);
+        }
+
+        if (speakerButton != null) {
+            speakerButton.setEnabled(controls);
+        }
+
+        if (callButton != null) {
+            callButton.setEnabled(!active);
+        }
+
+        if ("Ended".equals(state)
+                || "Failed".equals(state)) {
+
+            if (muteButton != null) {
+                muteButton.setText("🎙\nبی‌صدا");
+            }
+
             setSpeakerEnabled(false);
 
-            String peer = activeCallPeer;
-            if (peer == null || peer.trim().isEmpty()) {
-                peer = number;
+            String historyPeer = activeCallPeer;
+            if (historyPeer == null
+                    || historyPeer.trim().isEmpty()) {
+                historyPeer = number;
             }
 
             String result;
-            if ("IN".equals(activeCallDirection) && !activeCallConnected) {
+
+            if ("IN".equals(activeCallDirection)
+                    && !activeCallConnected) {
                 result = "MISSED";
             } else if ("Failed".equals(state)) {
                 result = "FAILED";
@@ -3716,8 +3814,10 @@ public final class MainActivity extends Activity {
             }
 
             saveCallHistoryEntry(
-                    activeCallDirection.isEmpty() ? "OUT" : activeCallDirection,
-                    peer,
+                    activeCallDirection.isEmpty()
+                            ? "OUT"
+                            : activeCallDirection,
+                    historyPeer,
                     result,
                     activeCallStartedAt == 0L
                             ? System.currentTimeMillis()
@@ -3770,7 +3870,7 @@ public final class MainActivity extends Activity {
         } catch (Exception ignored) {}
 
         if (speakerButton != null) {
-            speakerButton.setText(enabled ? "Earpiece" : "Speaker");
+            speakerButton.setText(enabled ? "🔊\nگوشی" : "🔊\nبلندگو");
         }
     }
 
