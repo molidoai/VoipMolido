@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -13,6 +14,7 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
+import android.provider.ContactsContract;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -38,6 +40,9 @@ import org.json.JSONObject;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public final class MainActivity extends Activity {
     private static final String HOME = "https://molidoai.github.io/VoipMolido/";
@@ -45,6 +50,7 @@ public final class MainActivity extends Activity {
             "https://api.github.com/repos/molidoai/VoipMolido/releases/latest";
     private static final String PREFS = "molido_voip_settings";
     private static final int REQ_MIC = 4102;
+    private static final int REQ_CONTACTS = 4103;
 
     private WebView web;
     private TextView updateStatus;
@@ -534,10 +540,10 @@ public final class MainActivity extends Activity {
         recentButton.setOnClickListener(v -> showCallHistory());
 
         Button contactsButton = new Button(this);
-        contactsButton.setText("QR");
+        contactsButton.setText("مخاطبین");
         contactsButton.setAllCaps(false);
         styleSecondaryButton(contactsButton);
-        contactsButton.setOnClickListener(v -> startQrScan());
+        contactsButton.setOnClickListener(v -> openContacts());
 
         LinearLayout.LayoutParams q1 = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -1326,6 +1332,111 @@ public final class MainActivity extends Activity {
         ad.show();
     }
 
+    private void openContacts() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.READ_CONTACTS},
+                    REQ_CONTACTS);
+            return;
+        }
+
+        showContactsDialog();
+    }
+
+    private void showContactsDialog() {
+        LinkedHashMap<String, String> contacts = new LinkedHashMap<>();
+
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    new String[]{
+                            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                            ContactsContract.CommonDataKinds.Phone.NUMBER
+                    },
+                    null,
+                    null,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                            + " COLLATE NOCASE ASC");
+
+            if (cursor != null) {
+                int nameIndex = cursor.getColumnIndex(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                int numberIndex = cursor.getColumnIndex(
+                        ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+                while (cursor.moveToNext() && contacts.size() < 300) {
+                    String name = nameIndex >= 0 ? cursor.getString(nameIndex) : "";
+                    String number = numberIndex >= 0 ? cursor.getString(numberIndex) : "";
+
+                    if (number == null) continue;
+
+                    number = normalizeContactNumber(number);
+                    if (number.isEmpty()) continue;
+
+                    if (name == null || name.trim().isEmpty()) {
+                        name = number;
+                    }
+
+                    String key = name.trim() + "\n" + number;
+                    contacts.putIfAbsent(key, number);
+                }
+            }
+        } catch (Exception e) {
+            showToast("خواندن مخاطبین ناموفق بود.");
+            return;
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+
+        if (contacts.isEmpty()) {
+            showToast("مخاطبی با شماره تلفن پیدا نشد.");
+            return;
+        }
+
+        ArrayList<String> rows = new ArrayList<>();
+        ArrayList<String> numbers = new ArrayList<>();
+
+        for (Map.Entry<String, String> entry : contacts.entrySet()) {
+            String[] parts = entry.getKey().split("\n", 2);
+            String name = parts.length > 0 ? parts[0] : entry.getValue();
+            String number = entry.getValue();
+
+            rows.add(name + "   •   " + number);
+            numbers.add(number);
+        }
+
+        String[] rowArray = rows.toArray(new String[0]);
+
+        new AlertDialog.Builder(this)
+                .setTitle("مخاطبین")
+                .setItems(rowArray, (dialog, which) -> {
+                    String number = numbers.get(which);
+                    dialInput.setText(number);
+                    dialInput.setSelection(number.length());
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private String normalizeContactNumber(String raw) {
+        if (raw == null) return "";
+
+        String value = raw.trim()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("(", "")
+                .replace(")", "");
+
+        if (value.startsWith("00")) {
+            value = "+" + value.substring(2);
+        }
+
+        return value;
+    }
+
     private void beginOutgoingCall() {
         String number = dialInput.getText().toString().trim();
 
@@ -1394,6 +1505,15 @@ public final class MainActivity extends Activity {
                 pendingIncomingAnswer = false;
                 pendingDialNumber = "";
                 showToast("برای تماس صوتی، اجازه میکروفن لازم است.");
+            }
+        }
+
+        if (requestCode == REQ_CONTACTS) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                showContactsDialog();
+            } else {
+                showToast("برای نمایش مخاطبین، اجازه Contacts لازم است.");
             }
         }
     }
