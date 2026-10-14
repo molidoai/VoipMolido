@@ -1,8 +1,13 @@
 name = "molido-voip-api"
 main = "src/index.js"
-compatibility_date = "2026-10-01"
-# Create D1 manually and replace the placeholder before deploying.
+compatibility_date = "2026-10-14"
+
 [[d1_databases]]
 binding = "DB"
-database_name = "molido-voip"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_name = "molido-voip-secure"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[assets]
+directory = "../web"
+binding = "ASSETS"
+run_worker_first = true

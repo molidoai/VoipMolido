@@ -1,17 +1,1 @@
-{
-  "name": "MOLIDO Universal VoIP — Demo",
-  "short_name": "MOLIDO VoIP",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#101827",
-  "icons": [
-    {
-      "src": "./assets/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
-}
+{"name":"MOLIDO VOIP","short_name":"MOLIDO","start_url":"./","scope":"./","display":"standalone","background_color":"#07101d","theme_color":"#07101d","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
