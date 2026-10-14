@@ -8,6 +8,7 @@ android {
             def ks = System.getenv('MOLIDO_KEYSTORE_PATH')
             if (ks) {
                 storeFile file(ks)
+                storeType "PKCS12"
                 storePassword System.getenv('MOLIDO_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('MOLIDO_KEY_ALIAS')
                 keyPassword System.getenv('MOLIDO_KEY_PASSWORD')
