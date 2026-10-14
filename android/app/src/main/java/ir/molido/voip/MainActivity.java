@@ -117,7 +117,31 @@ public final class MainActivity extends Activity {
         subtitle.setTextSize(12f);
         subtitle.setPadding(0, dp(2), 0, 0);
 
-        header.addView(brand);
+        LinearLayout headerTop = new LinearLayout(this);
+        headerTop.setOrientation(LinearLayout.HORIZONTAL);
+        headerTop.setGravity(Gravity.CENTER_VERTICAL);
+
+        headerTop.addView(brand, new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f));
+
+        Button headerUpdateButton = new Button(this);
+        headerUpdateButton.setText("↻");
+        headerUpdateButton.setTextSize(22f);
+        headerUpdateButton.setAllCaps(false);
+        headerUpdateButton.setContentDescription("بررسی بروزرسانی");
+        headerUpdateButton.setTextColor(Color.WHITE);
+        headerUpdateButton.setBackground(roundedBg("#1F2937", 18, "#374151"));
+        headerUpdateButton.setPadding(dp(10), dp(3), dp(10), dp(3));
+        headerUpdateButton.setOnClickListener(v -> checkUpdates(true));
+
+        LinearLayout.LayoutParams updateIconLp = new LinearLayout.LayoutParams(
+                dp(52),
+                dp(44));
+        headerTop.addView(headerUpdateButton, updateIconLp);
+
+        header.addView(headerTop);
         header.addView(subtitle);
         root.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
