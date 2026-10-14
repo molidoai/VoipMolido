@@ -956,15 +956,15 @@ public final class MainActivity extends Activity {
         String message =
                 "نسخه فعلی: v" + BuildConfig.VERSION_NAME
                         + "\n\n"
-                        + "بررسی نسخه جدید از GitHub رسمی MOLIDO انجام می‌شود. "
-                        + "پس از دانلود، SHA-256 بررسی و سپس نصب‌کننده Android باز می‌شود.";
+                        + "MOLIDO نسخه جدید را داخل برنامه بررسی می‌کند. "
+                        + "پس از دانلود و بررسی امنیتی، نصب‌کننده Android باز می‌شود.";
 
         new AlertDialog.Builder(this)
-                .setTitle("مرکز بروزرسانی")
+                .setTitle("مرکز بروزرسانی MOLIDO")
                 .setMessage(message)
                 .setNegativeButton("بستن", null)
                 .setPositiveButton(
-                        "بررسی الآن",
+                        "بررسی بروزرسانی",
                         (d, w) -> checkUpdates(true))
                 .show();
     }
@@ -4699,7 +4699,7 @@ public final class MainActivity extends Activity {
 
                 if (conn.getResponseCode() != 200) {
                     setStatus("بررسی بروزرسانی ناموفق بود.");
-                    if (manual) showToast("پاسخ GitHub دریافت نشد.");
+                    if (manual) showToast("سرویس بروزرسانی پاسخ نداد.");
                     return;
                 }
 
@@ -4794,28 +4794,17 @@ public final class MainActivity extends Activity {
     private void showUpdateDialog(UpdateInfo info) {
         String size = humanSize(info.apkSize);
 
-        String date = info.publishedAt.isEmpty()
-                ? "نامشخص"
-                : info.publishedAt
-                    .replace("T", " ")
-                    .replace("Z", " UTC");
-
         new AlertDialog.Builder(this)
-                .setTitle("بروزرسانی MOLIDO VOIP")
+                .setTitle("بروزرسانی MOLIDO")
                 .setMessage(
-                        "نسخه فعلی: v" + BuildConfig.VERSION_NAME +
-                        "\nنسخه جدید: " + info.tag +
-                        "\nحجم APK: " + size +
-                        "\nتاریخ انتشار: " + date)
+                        "نسخه جدید آماده است\n\n"
+                        + "نسخه فعلی: v" + BuildConfig.VERSION_NAME
+                        + "\nنسخه جدید: " + info.tag
+                        + "\nحجم: " + size
+                        + "\n\nبهبود عملکرد و رفع اشکالات")
                 .setNegativeButton("بعداً", null)
-                .setNeutralButton(
-                        "صفحه نسخه",
-                        (d, w) -> startActivity(
-                                new Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(info.releasePage))))
                 .setPositiveButton(
-                        "دانلود و نصب",
+                        "بروزرسانی",
                         (d, w) -> downloadAndInstallUpdate(info))
                 .show();
     }
@@ -4856,12 +4845,70 @@ public final class MainActivity extends Activity {
             pendingInstallUri = null;
             updateDownloadId = dm.enqueue(request);
 
-            setStatus("در حال دانلود " + info.tag + " • لطفاً صبر کنید");
+            setStatus("در حال دانلود بروزرسانی... 0%");
             showToast("دانلود بروزرسانی شروع شد.");
+            watchUpdateProgress(updateDownloadId);
         } catch (Exception e) {
             setStatus("شروع دانلود بروزرسانی ناموفق بود.");
             showToast("دانلود شروع نشد.");
         }
+    }
+
+    private void watchUpdateProgress(long downloadId) {
+        new Thread(() -> {
+            android.app.DownloadManager dm =
+                    (android.app.DownloadManager)
+                            getSystemService(DOWNLOAD_SERVICE);
+
+            while (downloadId == updateDownloadId) {
+                android.app.DownloadManager.Query query =
+                        new android.app.DownloadManager.Query()
+                                .setFilterById(downloadId);
+
+                try (android.database.Cursor cursor = dm.query(query)) {
+                    if (cursor == null || !cursor.moveToFirst()) {
+                        return;
+                    }
+
+                    long downloaded = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(
+                                    android.app.DownloadManager
+                                            .COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                    long total = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(
+                                    android.app.DownloadManager
+                                            .COLUMN_TOTAL_SIZE_BYTES));
+                    int status = cursor.getInt(
+                            cursor.getColumnIndexOrThrow(
+                                    android.app.DownloadManager.COLUMN_STATUS));
+
+                    if (total > 0L) {
+                        int percent = (int) Math.min(
+                                100L,
+                                (downloaded * 100L) / total);
+                        setStatus(
+                                "در حال دانلود بروزرسانی... "
+                                        + percent + "%");
+                    } else {
+                        setStatus("در حال دانلود بروزرسانی...");
+                    }
+
+                    if (status == android.app.DownloadManager.STATUS_SUCCESSFUL
+                            || status == android.app.DownloadManager.STATUS_FAILED) {
+                        return;
+                    }
+                } catch (Exception e) {
+                    return;
+                }
+
+                try {
+                    Thread.sleep(750L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }).start();
     }
 
     private void handleCompletedUpdateDownload(long downloadId) {
@@ -4901,7 +4948,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        setStatus("در حال تأیید امنیت فایل بروزرسانی...");
+        setStatus("دانلود کامل شد • در حال بررسی امنیت...");
 
         new Thread(() -> {
             try {
@@ -4913,7 +4960,7 @@ public final class MainActivity extends Activity {
                 }
 
                 pendingInstallUri = apkUri;
-                setStatus("دانلود کامل شد • بررسی امنیتی موفق");
+                setStatus("بررسی امنیتی موفق ✓ • آماده نصب");
                 runOnUiThread(() -> requestUpdateInstall(apkUri));
             } catch (Exception e) {
                 setStatus("بررسی SHA-256 بروزرسانی ناموفق بود.");
@@ -4950,7 +4997,7 @@ public final class MainActivity extends Activity {
         if (android.os.Build.VERSION.SDK_INT >= 26
                 && !getPackageManager().canRequestPackageInstalls()) {
             pendingInstallUri = apkUri;
-            showToast("اجازه نصب از این منبع را فعال کن.");
+            showToast("برای ادامه، اجازه نصب بروزرسانی MOLIDO را فعال کن.");
 
             android.content.Intent settingsIntent =
                     new android.content.Intent(
@@ -4978,7 +5025,7 @@ public final class MainActivity extends Activity {
             install.addFlags(
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(install);
-            setStatus("آماده نصب • Install را در Android بزنید");
+            setStatus("آماده نصب • نصب را تأیید کنید");
         } catch (Exception e) {
             setStatus("باز کردن نصب‌کننده Android ناموفق بود.");
             showToast("نصب‌کننده باز نشد.");
