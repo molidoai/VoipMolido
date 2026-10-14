@@ -188,7 +188,7 @@ public final class MainActivity extends Activity {
                                 sipManager.onNetworkStateChanged(
                                         reachable, type, metered)));
 
-        darkMode = prefs.getBoolean("dark_mode", false);
+        darkMode = prefs.getBoolean("dark_mode", true);
 
         int bg = darkMode
                 ? Color.rgb(15, 23, 42)
@@ -223,9 +223,9 @@ public final class MainActivity extends Activity {
 
         TextView brand = new TextView(this);
         brand.setText("MOLIDO");
-        brand.setTextSize(22f);
+        brand.setTextSize(24f);
         brand.setTypeface(Typeface.DEFAULT_BOLD);
-        brand.setTextColor(primaryText);
+        brand.setTextColor(Color.rgb(56, 189, 248));
 
         String displayName = prefs.getString("display_name", "").trim();
         String ext = prefs.getString("extension", "").trim();
@@ -256,13 +256,12 @@ public final class MainActivity extends Activity {
         qr.setOnClickListener(v -> startQrScan());
 
         Button more = new Button(this);
-        more.setText("⋮");
+        more.setText("☰");
         more.setTextSize(22f);
         more.setAllCaps(false);
         styleSecondaryButton(more);
         more.setOnClickListener(v -> showMoreCenter());
 
-        header.addView(qr);
         header.addView(more);
         root.addView(header);
 
@@ -270,11 +269,7 @@ public final class MainActivity extends Activity {
         connectionRow.setOrientation(LinearLayout.HORIZONTAL);
         connectionRow.setGravity(Gravity.CENTER_VERTICAL);
         connectionRow.setPadding(dp(16), dp(8), dp(16), dp(8));
-        connectionRow.setBackground(
-                roundedBg(
-                        darkMode ? "#1E293B" : "#FFFFFF",
-                        18,
-                        darkMode ? "#334155" : "#E2E8F0"));
+        connectionRow.setBackgroundColor(Color.TRANSPARENT);
 
         connectionStatus = new TextView(this);
         connectionStatus.setTextSize(13f);
@@ -289,8 +284,8 @@ public final class MainActivity extends Activity {
 
         connectionStatus.setText(
                 profileReady
-                        ? "● آماده اتصال"
-                        : "● حساب تلفن تنظیم نشده");
+                        ? "Ready for Calls"
+                        : "حساب تلفن تنظیم نشده");
 
         connectionStatus.setTextColor(
                 profileReady
@@ -364,6 +359,7 @@ public final class MainActivity extends Activity {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT);
         updateCenterLp.setMargins(dp(12), 0, dp(12), dp(8));
+        updateCenter.setVisibility(android.view.View.GONE);
         root.addView(updateCenter, updateCenterLp);
 
         routeStatus = new TextView(this);
@@ -383,6 +379,7 @@ public final class MainActivity extends Activity {
         title.setTextSize(28f);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(primaryText);
+        title.setVisibility(android.view.View.GONE);
         content.addView(title);
 
         TextView subtitle = new TextView(this);
@@ -390,67 +387,127 @@ public final class MainActivity extends Activity {
         subtitle.setTextSize(12f);
         subtitle.setTextColor(secondaryText);
         subtitle.setPadding(0, dp(2), 0, dp(12));
+        subtitle.setVisibility(android.view.View.GONE);
         content.addView(subtitle);
 
         LinearLayout dialCard = new LinearLayout(this);
         dialCard.setOrientation(LinearLayout.VERTICAL);
         dialCard.setPadding(dp(14), dp(14), dp(14), dp(14));
-        dialCard.setBackground(
-                roundedBg(
-                        darkMode ? "#1E293B" : "#FFFFFF",
-                        24,
-                        darkMode ? "#334155" : "#E2E8F0"));
+        dialCard.setBackgroundColor(Color.TRANSPARENT);
 
         dialInput = new EditText(this);
-        dialInput.setHint("شماره یا داخلی");
+        dialInput.setHint("شماره را وارد کنید");
         dialInput.setInputType(InputType.TYPE_CLASS_PHONE);
         dialInput.setGravity(Gravity.CENTER);
         dialInput.setSingleLine(true);
-        dialInput.setTextSize(25f);
+        dialInput.setTextSize(30f);
         dialInput.setTextColor(primaryText);
         dialInput.setHintTextColor(secondaryText);
         dialInput.setPadding(dp(12), dp(12), dp(12), dp(12));
-        dialInput.setBackground(
-                roundedBg(
-                        darkMode ? "#0F172A" : "#F8FAFC",
-                        18,
-                        darkMode ? "#334155" : "#E2E8F0"));
+        dialInput.setBackgroundColor(Color.TRANSPARENT);
 
         dialCard.addView(dialInput);
+
+        String[][] homeKeys = {
+                {"1", ""},
+                {"2", "ABC"},
+                {"3", "DEF"},
+                {"4", "GHI"},
+                {"5", "JKL"},
+                {"6", "MNO"},
+                {"7", "PQRS"},
+                {"8", "TUV"},
+                {"9", "WXYZ"},
+                {"*", ""},
+                {"0", "+"},
+                {"#", ""}
+        };
+
+        for (int rowIndex = 0; rowIndex < 4; rowIndex++) {
+            LinearLayout keyRow = new LinearLayout(this);
+            keyRow.setOrientation(LinearLayout.HORIZONTAL);
+            keyRow.setGravity(Gravity.CENTER);
+
+            for (int col = 0; col < 3; col++) {
+                int keyIndex = rowIndex * 3 + col;
+                String digit = homeKeys[keyIndex][0];
+                String letters = homeKeys[keyIndex][1];
+
+                Button key = new Button(this);
+                key.setAllCaps(false);
+                key.setText(
+                        letters.isEmpty()
+                                ? digit
+                                : digit + "
+" + letters);
+                key.setTextSize(24f);
+                key.setTextColor(Color.WHITE);
+                key.setGravity(Gravity.CENTER);
+                key.setPadding(0, 0, 0, 0);
+                key.setMinWidth(0);
+                key.setMinHeight(0);
+                key.setBackgroundColor(Color.TRANSPARENT);
+                key.setOnClickListener(v -> {
+                    String value =
+                            ((Button) v).getText()
+                                    .toString()
+                                    .split("\n")[0];
+                    dialInput.append(value);
+                });
+
+                LinearLayout.LayoutParams kp =
+                        new LinearLayout.LayoutParams(
+                                0,
+                                dp(82),
+                                1f);
+                kp.setMargins(dp(8), dp(2), dp(8), dp(2));
+                keyRow.addView(key, kp);
+            }
+
+            dialCard.addView(keyRow);
+        }
 
         LinearLayout dialActions = new LinearLayout(this);
         dialActions.setOrientation(LinearLayout.HORIZONTAL);
         dialActions.setGravity(Gravity.CENTER);
-        dialActions.setPadding(0, dp(10), 0, 0);
+        dialActions.setPadding(dp(18), dp(8), dp(18), dp(6));
 
-        Button keypadButton = new Button(this);
-        keypadButton.setText("⌨  صفحه کلید");
-        keypadButton.setAllCaps(false);
-        styleSecondaryButton(keypadButton);
-        keypadButton.setOnClickListener(v -> showCleanDialpad());
+        Button searchContact = new Button(this);
+        searchContact.setText("⌕");
+        searchContact.setTextSize(32f);
+        searchContact.setTextColor(Color.WHITE);
+        searchContact.setBackgroundColor(Color.TRANSPARENT);
+        searchContact.setOnClickListener(v -> openContacts());
 
         callButton = new Button(this);
-        callButton.setText("☎  تماس");
+        callButton.setText("☎");
+        callButton.setTextSize(30f);
+        callButton.setTextColor(Color.WHITE);
         callButton.setAllCaps(false);
-        stylePrimaryButton(callButton);
+        callButton.setBackground(roundedBg("#22C55E", 44, null));
         callButton.setOnClickListener(v -> beginOutgoingCall());
 
-        LinearLayout.LayoutParams d1 =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        d1.setMargins(0, 0, dp(5), 0);
+        Button deleteDigit = new Button(this);
+        deleteDigit.setText("⌫");
+        deleteDigit.setTextSize(28f);
+        deleteDigit.setTextColor(Color.WHITE);
+        deleteDigit.setBackgroundColor(Color.TRANSPARENT);
+        deleteDigit.setOnClickListener(v -> {
+            int len = dialInput.length();
+            if (len > 0) {
+                dialInput.getText().delete(len - 1, len);
+            }
+        });
 
-        LinearLayout.LayoutParams d2 =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        d2.setMargins(dp(5), 0, 0, 0);
+        LinearLayout.LayoutParams sideAction =
+                new LinearLayout.LayoutParams(0, dp(76), 1f);
+        LinearLayout.LayoutParams callAction =
+                new LinearLayout.LayoutParams(dp(88), dp(88));
+        callAction.setMargins(dp(12), 0, dp(12), 0);
 
-        dialActions.addView(keypadButton, d1);
-        dialActions.addView(callButton, d2);
+        dialActions.addView(searchContact, sideAction);
+        dialActions.addView(callButton, callAction);
+        dialActions.addView(deleteDigit, sideAction);
 
         dialCard.addView(dialActions);
         content.addView(dialCard);
@@ -461,6 +518,7 @@ public final class MainActivity extends Activity {
         recentTitle.setTypeface(Typeface.DEFAULT_BOLD);
         recentTitle.setTextColor(primaryText);
         recentTitle.setPadding(0, dp(18), 0, dp(8));
+        recentTitle.setVisibility(android.view.View.GONE);
         content.addView(recentTitle);
 
         LinearLayout recentCard = new LinearLayout(this);
@@ -526,6 +584,7 @@ public final class MainActivity extends Activity {
 
         recentCard.addView(recentCall);
         recentCard.setOnClickListener(v -> showCallHistory());
+        recentCard.setVisibility(android.view.View.GONE);
         content.addView(recentCard);
 
         LinearLayout callCard = new LinearLayout(this);
@@ -688,6 +747,7 @@ public final class MainActivity extends Activity {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT);
         callCardLp.setMargins(0, dp(14), 0, 0);
+        callCard.setVisibility(android.view.View.GONE);
         content.addView(callCard, callCardLp);
 
         updateStatus = new TextView(this);
@@ -709,50 +769,60 @@ public final class MainActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(8), dp(6), dp(8), dp(8));
-        nav.setBackgroundColor(card);
-        nav.setElevation(dp(10));
-
-        Button navCalls = new Button(this);
-        navCalls.setText("☎\nتماس‌ها");
-        navCalls.setTextSize(11f);
-        navCalls.setAllCaps(false);
-        navCalls.setTextColor(Color.rgb(37, 99, 235));
-        navCalls.setBackgroundColor(Color.TRANSPARENT);
-        navCalls.setOnClickListener(v -> showCallsCenter());
+        nav.setPadding(dp(4), dp(4), dp(4), dp(6));
+        nav.setBackgroundColor(Color.rgb(32, 32, 32));
 
         Button navContacts = new Button(this);
-        navContacts.setText("👤\nمخاطبین");
-        navContacts.setTextSize(11f);
+        navContacts.setText("👤
+مخاطبین");
+        navContacts.setTextSize(10f);
         navContacts.setAllCaps(false);
-        navContacts.setTextColor(secondaryText);
+        navContacts.setTextColor(Color.WHITE);
         navContacts.setBackgroundColor(Color.TRANSPARENT);
         navContacts.setOnClickListener(v -> showContactsCenter());
 
+        Button navKeypad = new Button(this);
+        navKeypad.setText("⠿
+صفحه‌کلید");
+        navKeypad.setTextSize(10f);
+        navKeypad.setAllCaps(false);
+        navKeypad.setTextColor(Color.rgb(56, 189, 248));
+        navKeypad.setBackgroundColor(Color.rgb(66, 66, 66));
+        navKeypad.setOnClickListener(v -> dialInput.requestFocus());
+
+        Button navRecents = new Button(this);
+        navRecents.setText("◷
+اخیرها");
+        navRecents.setTextSize(10f);
+        navRecents.setAllCaps(false);
+        navRecents.setTextColor(Color.WHITE);
+        navRecents.setBackgroundColor(Color.TRANSPARENT);
+        navRecents.setOnClickListener(v -> showCallHistory());
+
         Button navMessages = new Button(this);
-        navMessages.setText("✉\nپیام‌ها");
-        navMessages.setTextSize(11f);
+        navMessages.setText("▱
+پیام‌ها");
+        navMessages.setTextSize(10f);
         navMessages.setAllCaps(false);
-        navMessages.setTextColor(secondaryText);
+        navMessages.setTextColor(Color.WHITE);
         navMessages.setBackgroundColor(Color.TRANSPARENT);
         navMessages.setOnClickListener(v -> showMessagesCenter());
 
         Button navMore = new Button(this);
-        navMore.setText("☰\nبیشتر");
-        navMore.setTextSize(11f);
+        navMore.setText("•••
+بیشتر");
+        navMore.setTextSize(10f);
         navMore.setAllCaps(false);
-        navMore.setTextColor(secondaryText);
+        navMore.setTextColor(Color.WHITE);
         navMore.setBackgroundColor(Color.TRANSPARENT);
         navMore.setOnClickListener(v -> showMoreCenter());
 
         LinearLayout.LayoutParams np =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(64),
-                        1f);
+                new LinearLayout.LayoutParams(0, dp(64), 1f);
 
-        nav.addView(navCalls, np);
         nav.addView(navContacts, np);
+        nav.addView(navKeypad, np);
+        nav.addView(navRecents, np);
         nav.addView(navMessages, np);
         nav.addView(navMore, np);
 
@@ -1011,6 +1081,19 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_INSTALL_UNKNOWN
+                && pendingInstallUri != null) {
+            if (android.os.Build.VERSION.SDK_INT < 26
+                    || getPackageManager().canRequestPackageInstalls()) {
+                android.net.Uri uri = pendingInstallUri;
+                pendingInstallUri = null;
+                launchPackageInstaller(uri);
+            } else {
+                showToast("اجازه نصب بروزرسانی فعال نشد.");
+            }
+            return;
+        }
+
         IntentResult result = IntentIntegrator.parseActivityResult(
                 requestCode, resultCode, data);
 
@@ -5011,27 +5094,6 @@ public final class MainActivity extends Activity {
         }
 
         return false;
-    }
-
-    @Override
-    protected void onActivityResult(
-            int requestCode,
-            int resultCode,
-            android.content.Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode == REQ_INSTALL_UNKNOWN
-                && pendingInstallUri != null) {
-            if (android.os.Build.VERSION.SDK_INT < 26
-                    || getPackageManager()
-                            .canRequestPackageInstalls()) {
-                android.net.Uri uri = pendingInstallUri;
-                pendingInstallUri = null;
-                launchPackageInstaller(uri);
-            } else {
-                showToast("اجازه نصب بروزرسانی فعال نشد.");
-            }
-        }
     }
 
     @Override
