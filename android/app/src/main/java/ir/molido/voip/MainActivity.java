@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private static final int REQ_CONTACTS = 4103;
     private static final int REQ_INSTALL_UNKNOWN = 4104;
     private static final int REQ_CAMERA = 4105;
+    private static final int REQ_APK_INSTALL = 4106;
 
     private WebView web;
     private TextView updateStatus;
@@ -1228,6 +1229,16 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_APK_INSTALL) {
+            if (resultCode == RESULT_OK) {
+                setStatus("بروزرسانی نصب شد ✓");
+            } else {
+                setStatus("نصب بروزرسانی تکمیل نشد.");
+                showToast("نصب توسط Android لغو یا رد شد.");
+            }
+            return;
+        }
+
         if (requestCode == REQ_INSTALL_UNKNOWN
                 && pendingInstallUri != null) {
             if (android.os.Build.VERSION.SDK_INT < 26
@@ -5544,35 +5555,58 @@ public final class MainActivity extends Activity {
         try {
             android.content.Intent install =
                     new android.content.Intent(
-                            android.content.Intent.ACTION_VIEW);
+                            android.content.Intent.ACTION_INSTALL_PACKAGE);
 
-            install.setDataAndType(
-                    apkUri,
-                    "application/vnd.android.package-archive");
-
+            install.setData(apkUri);
             install.setClipData(
                     android.content.ClipData.newRawUri(
                             "MOLIDO update",
                             apkUri));
-
             install.addFlags(
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            install.putExtra(
+                    android.content.Intent.EXTRA_NOT_UNKNOWN_SOURCE,
+                    true);
+            install.putExtra(
+                    android.content.Intent.EXTRA_RETURN_RESULT,
+                    true);
 
-            install.addFlags(
-                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (install.resolveActivity(getPackageManager()) != null) {
+                startActivityForResult(install, REQ_APK_INSTALL);
+                setStatus(
+                        "آماده نصب • نصب را در Android تأیید کنید");
+                return;
+            }
 
-            if (install.resolveActivity(getPackageManager()) == null) {
+            android.content.Intent fallback =
+                    new android.content.Intent(
+                            android.content.Intent.ACTION_VIEW);
+            fallback.setDataAndType(
+                    apkUri,
+                    "application/vnd.android.package-archive");
+            fallback.setClipData(
+                    android.content.ClipData.newRawUri(
+                            "MOLIDO update",
+                            apkUri));
+            fallback.addFlags(
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            if (fallback.resolveActivity(getPackageManager()) == null) {
                 setStatus("نصب‌کننده Android در دسترس نیست.");
                 showToast("نصب‌کننده Android پیدا نشد.");
                 return;
             }
 
-            startActivity(install);
-            setStatus("آماده نصب • نصب را در Android تأیید کنید");
+            startActivity(fallback);
+            setStatus(
+                    "آماده نصب • نصب را در Android تأیید کنید");
 
         } catch (android.content.ActivityNotFoundException e) {
             setStatus("نصب‌کننده Android در دسترس نیست.");
             showToast("نصب‌کننده Android پیدا نشد.");
+        } catch (SecurityException e) {
+            setStatus("Android اجازه نصب بروزرسانی را نداد.");
+            showToast("مجوز نصب برنامه‌های ناشناس را برای MOLIDO فعال کنید.");
         } catch (Exception e) {
             setStatus("باز کردن نصب‌کننده Android ناموفق بود.");
             showToast("نصب‌کننده باز نشد.");
