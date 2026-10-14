@@ -51,6 +51,8 @@ public final class MainActivity extends Activity {
     private boolean darkMode;
     private SharedPreferences prefs;
     private SecureStore secureStore;
+    private SipRegistrationManager sipManager;
+    private Button registerButton;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -66,6 +68,9 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         secureStore = new SecureStore(this);
+        sipManager = new SipRegistrationManager(this,
+                (state, detail, success) -> runOnUiThread(() ->
+                        updateSipRegistrationUi(state, detail, success)));
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
@@ -130,27 +135,56 @@ public final class MainActivity extends Activity {
         extensionLabel.setPadding(0, dp(5), 0, dp(3));
 
         connectionStatus = new TextView(this);
-        String serverReady = prefs.getString("server", "");
-        String extReady = prefs.getString("extension", "");
+        String sipRegistrarReady = prefs.getString("sip_registrar", "");
         String userReady = prefs.getString("sip_username", "");
         boolean passwordReady = hasStoredSipPassword();
         boolean profileReady =
-                !serverReady.isEmpty()
-                && !extReady.isEmpty()
+                !sipRegistrarReady.isEmpty()
                 && !userReady.isEmpty()
                 && passwordReady;
 
         connectionStatus.setText(profileReady
-                ? "●  Secure SIP profile ready • Registration در فاز بعد"
+                ? "●  Offline • آماده Register"
                 : "●  تنظیمات Secure SIP ناقص");
         connectionStatus.setTextSize(12f);
         connectionStatus.setTextColor(profileReady
-                ? Color.rgb(16, 185, 129)
+                ? Color.rgb(37, 99, 235)
                 : Color.rgb(245, 158, 11));
 
         statusCard.addView(profileTitle);
         statusCard.addView(extensionLabel);
         statusCard.addView(connectionStatus);
+
+        registerButton = new Button(this);
+        registerButton.setText(profileReady ? "Register SIP" : "تنظیمات SIP");
+        registerButton.setAllCaps(false);
+        stylePrimaryButton(registerButton);
+        registerButton.setOnClickListener(v -> {
+            if (!isSipProfileReady()) {
+                showSettings();
+                return;
+            }
+            startSipRegistration();
+        });
+
+        LinearLayout.LayoutParams regLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        regLp.setMargins(0, dp(10), 0, 0);
+        statusCard.addView(registerButton, regLp);
+
+        Button unregisterButton = new Button(this);
+        unregisterButton.setText("Unregister");
+        unregisterButton.setAllCaps(false);
+        styleSecondaryButton(unregisterButton);
+        unregisterButton.setOnClickListener(v -> sipManager.unregister());
+
+        LinearLayout.LayoutParams unregLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        unregLp.setMargins(0, dp(6), 0, 0);
+        statusCard.addView(unregisterButton, unregLp);
+
         dashboard.addView(statusCard);
 
         TextView dialTitle = new TextView(this);
@@ -582,6 +616,10 @@ public final class MainActivity extends Activity {
                 prefs.getString("extension", ""));
         extension.setInputType(InputType.TYPE_CLASS_PHONE);
 
+        EditText sipRegistrar = field(
+                "SIP Registrar / Domain (مثال: pbx.example.com:5061)",
+                prefs.getString("sip_registrar", ""));
+
         EditText sipUsername = field("SIP Username",
                 prefs.getString("sip_username", ""));
 
@@ -606,6 +644,7 @@ public final class MainActivity extends Activity {
         form.addView(server);
         form.addView(tenant);
         form.addView(extension);
+        form.addView(sipRegistrar);
         form.addView(sipUsername);
         form.addView(sipPassword);
         form.addView(transport);
@@ -668,6 +707,7 @@ public final class MainActivity extends Activity {
                         .putString("server", serverValue)
                         .putString("tenant", tenant.getText().toString().trim())
                         .putString("extension", extension.getText().toString().trim())
+                        .putString("sip_registrar", sipRegistrar.getText().toString().trim())
                         .putString("sip_username", sipUsername.getText().toString().trim())
                         .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
@@ -680,6 +720,84 @@ public final class MainActivity extends Activity {
         });
 
         ad.show();
+    }
+
+    private boolean isSipProfileReady() {
+        return !prefs.getString("sip_registrar", "").trim().isEmpty()
+                && !prefs.getString("sip_username", "").trim().isEmpty()
+                && hasStoredSipPassword();
+    }
+
+    private void startSipRegistration() {
+        try {
+            String registrar = prefs.getString("sip_registrar", "").trim();
+            String username = prefs.getString("sip_username", "").trim();
+            String transport = prefs.getString("sip_transport", "TLS").trim();
+            String password = secureStore.getSecret("sip_password");
+
+            if (password == null || password.isEmpty()) {
+                showToast("رمز SIP ذخیره نشده است.");
+                showSettings();
+                return;
+            }
+
+            registerButton.setEnabled(false);
+            registerButton.setText("Connecting…");
+            connectionStatus.setText("●  Connecting…");
+            connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+
+            sipManager.register(
+                    registrar,
+                    username,
+                    password,
+                    transport);
+
+        } catch (Exception e) {
+            registerButton.setEnabled(true);
+            registerButton.setText("Register SIP");
+            connectionStatus.setText("●  Failed • " + safeUiMessage(e.getMessage()));
+            connectionStatus.setTextColor(Color.rgb(220, 38, 38));
+        }
+    }
+
+    private void updateSipRegistrationUi(
+            String state,
+            String detail,
+            boolean success) {
+
+        String safeDetail = safeUiMessage(detail);
+
+        if ("Registered".equals(state)) {
+            connectionStatus.setText("●  Registered" +
+                    (safeDetail.isEmpty() ? "" : " • " + safeDetail));
+            connectionStatus.setTextColor(Color.rgb(16, 185, 129));
+            registerButton.setEnabled(true);
+            registerButton.setText("Registered");
+        } else if ("Connecting".equals(state)
+                || "Refreshing".equals(state)) {
+            connectionStatus.setText("●  " + state);
+            connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+            registerButton.setEnabled(false);
+            registerButton.setText(state + "…");
+        } else if ("Failed".equals(state)) {
+            connectionStatus.setText("●  Failed" +
+                    (safeDetail.isEmpty() ? "" : " • " + safeDetail));
+            connectionStatus.setTextColor(Color.rgb(220, 38, 38));
+            registerButton.setEnabled(true);
+            registerButton.setText("Retry Register");
+        } else {
+            connectionStatus.setText("●  Offline" +
+                    (safeDetail.isEmpty() ? "" : " • " + safeDetail));
+            connectionStatus.setTextColor(Color.rgb(107, 114, 128));
+            registerButton.setEnabled(true);
+            registerButton.setText("Register SIP");
+        }
+    }
+
+    private String safeUiMessage(String value) {
+        if (value == null) return "";
+        String v = value.replace('\n', ' ').replace('\r', ' ').trim();
+        return v.length() > 120 ? v.substring(0, 120) : v;
     }
 
     private boolean hasStoredSipPassword() {
@@ -964,6 +1082,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try {
+            if (sipManager != null) sipManager.shutdown();
+        } catch (Exception ignored) {
+        }
         web.destroy();
         super.onDestroy();
     }
