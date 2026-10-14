@@ -1122,6 +1122,12 @@ public final class MainActivity extends Activity {
             didCount = dids.length();
         } catch (Exception ignored) {}
 
+        int ivrCount = 0;
+        try {
+            JSONArray ivrs = new JSONArray(prefs.getString("pbx_ivrs_json", "[]"));
+            ivrCount = ivrs.length();
+        } catch (Exception ignored) {}
+
         String sip = prefs.getString("sip_username", "").trim();
         String registrar = prefs.getString("sip_registrar", "").trim();
 
@@ -1129,13 +1135,14 @@ public final class MainActivity extends Activity {
                 ? "SIP آماده"
                 : "SIP تنظیم نشده";
 
-        return sipState + " • " + didCount + " DID";
+        return sipState + " • " + didCount + " DID • " + ivrCount + " IVR";
     }
 
     private void showPbxCenter() {
         String[] items = {
                 "SIP Account",
                 "DID Numbers",
+                "IVR / تلفن گویا",
                 "SIP Trunks",
                 "SMS Center"
         };
@@ -1148,11 +1155,13 @@ public final class MainActivity extends Activity {
                     } else if (which == 1) {
                         showDidManager();
                     } else if (which == 2) {
+                        showIvrManager();
+                    } else if (which == 3) {
                         showSettingsInfo(
                                 "SIP Trunks",
                                 "مدیریت Trunk در فاز بعدی اضافه می‌شود. "
                                         + "این بخش برای Provider، Host، Auth، Route و Failover آماده خواهد شد.");
-                    } else if (which == 3) {
+                    } else if (which == 4) {
                         showSettingsInfo(
                                 "SMS Center",
                                 "مرکز پیامک در فاز بعدی اضافه می‌شود. "
@@ -1161,6 +1170,385 @@ public final class MainActivity extends Activity {
                 })
                 .setNegativeButton("بستن", null)
                 .show();
+    }
+
+    private void showIvrManager() {
+        JSONArray ivrs;
+        try {
+            ivrs = new JSONArray(prefs.getString("pbx_ivrs_json", "[]"));
+        } catch (Exception e) {
+            ivrs = new JSONArray();
+        }
+
+        int count = ivrs.length();
+        String[] rows = new String[count + 1];
+        rows[0] = "＋ افزودن تلفن گویا";
+
+        for (int i = 0; i < count; i++) {
+            JSONObject item = ivrs.optJSONObject(i);
+            if (item == null) {
+                rows[i + 1] = "IVR";
+                continue;
+            }
+
+            String name = item.optString("name", "IVR");
+            String lang = item.optString("language", "fa");
+            boolean enabled = item.optBoolean("enabled", true);
+
+            rows[i + 1] =
+                    (enabled ? "● " : "○ ")
+                    + name
+                    + " • "
+                    + lang.toUpperCase(java.util.Locale.ROOT);
+        }
+
+        final JSONArray current = ivrs;
+
+        new AlertDialog.Builder(this)
+                .setTitle("IVR / تلفن گویا")
+                .setItems(rows, (dialog, which) -> {
+                    if (which == 0) {
+                        showIvrEditor(-1);
+                    } else {
+                        showIvrActions(which - 1);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showIvrActions(int index) {
+        JSONArray ivrs;
+        try {
+            ivrs = new JSONArray(prefs.getString("pbx_ivrs_json", "[]"));
+        } catch (Exception e) {
+            showToast("خواندن IVR ناموفق بود.");
+            return;
+        }
+
+        JSONObject item = ivrs.optJSONObject(index);
+        if (item == null) return;
+
+        String name = item.optString("name", "IVR");
+        boolean enabled = item.optBoolean("enabled", true);
+
+        String[] actions = {
+                "ویرایش",
+                enabled ? "غیرفعال کردن" : "فعال کردن",
+                "پیش‌نمایش تنظیمات",
+                "حذف"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle(name)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        showIvrEditor(index);
+                    } else if (which == 1) {
+                        setIvrEnabled(index, !enabled);
+                    } else if (which == 2) {
+                        showIvrPreview(index);
+                    } else if (which == 3) {
+                        deleteIvr(index);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showIvrEditor(int index) {
+        JSONArray ivrs;
+        try {
+            ivrs = new JSONArray(prefs.getString("pbx_ivrs_json", "[]"));
+        } catch (Exception e) {
+            ivrs = new JSONArray();
+        }
+
+        JSONObject existing = index >= 0 ? ivrs.optJSONObject(index) : null;
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+        scroll.addView(form);
+
+        EditText name = field(
+                "نام IVR",
+                existing == null ? "" : existing.optString("name", ""));
+
+        EditText greeting = field(
+                "متن پیام خوش‌آمدگویی",
+                existing == null ? "" : existing.optString("greeting", ""));
+
+        EditText audioSource = field(
+                "Audio URL / PBX Media ID (اختیاری)",
+                existing == null ? "" : existing.optString("audioSource", ""));
+
+        EditText language = field(
+                "زبان: fa / en / bal",
+                existing == null ? "fa" : existing.optString("language", "fa"));
+
+        EditText timeout = field(
+                "Timeout ثانیه",
+                existing == null ? "7" : String.valueOf(existing.optInt("timeout", 7)));
+        timeout.setInputType(InputType.TYPE_CLASS_NUMBER);
+
+        EditText repeats = field(
+                "تعداد تکرار پیام",
+                existing == null ? "2" : String.valueOf(existing.optInt("repeats", 2)));
+        repeats.setInputType(InputType.TYPE_CLASS_NUMBER);
+
+        EditText defaultDest = field(
+                "مقصد پیش‌فرض / Timeout Destination",
+                existing == null ? "" : existing.optString("defaultDestination", ""));
+
+        EditText businessHours = field(
+                "Business Hours (اختیاری، مثال 08:00-18:00)",
+                existing == null ? "" : existing.optString("businessHours", ""));
+
+        form.addView(name);
+        form.addView(greeting);
+        form.addView(audioSource);
+        form.addView(language);
+        form.addView(timeout);
+        form.addView(repeats);
+        form.addView(defaultDest);
+        form.addView(businessHours);
+
+        TextView mapTitle = new TextView(this);
+        mapTitle.setText("DTMF Key Mapping");
+        mapTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        mapTitle.setTextSize(14f);
+        mapTitle.setPadding(0, dp(12), 0, dp(6));
+        form.addView(mapTitle);
+
+        EditText[] keys = new EditText[10];
+
+        for (int i = 0; i <= 9; i++) {
+            String value = "";
+            if (existing != null) {
+                JSONObject mappings = existing.optJSONObject("mappings");
+                if (mappings != null) {
+                    value = mappings.optString(String.valueOf(i), "");
+                }
+            }
+
+            keys[i] = field(
+                    "کلید " + i + " → مقصد (Extension / Queue / Ring Group / Voicemail)",
+                    value);
+            form.addView(keys[i]);
+        }
+
+        TextView note = new TextView(this);
+        note.setText(
+                "این نسخه تنظیمات IVR را داخل اپ مدیریت می‌کند. "
+                        + "اجرای واقعی Greeting، دریافت DTMF و Route تماس "
+                        + "باید روی PBX/Provider backend انجام شود.");
+        note.setTextSize(11f);
+        note.setTextColor(Color.GRAY);
+        note.setPadding(0, dp(10), 0, 0);
+        form.addView(note);
+
+        final JSONArray ivrList = ivrs;
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle(index < 0 ? "افزودن تلفن گویا" : "ویرایش تلفن گویا")
+                .setView(scroll)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ذخیره", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String nameValue = name.getText().toString().trim();
+                if (nameValue.isEmpty()) {
+                    name.setError("نام IVR لازم است.");
+                    return;
+                }
+
+                int timeoutValue;
+                int repeatsValue;
+
+                try {
+                    timeoutValue = Integer.parseInt(timeout.getText().toString().trim());
+                    repeatsValue = Integer.parseInt(repeats.getText().toString().trim());
+                } catch (Exception e) {
+                    timeout.setError("عدد معتبر وارد کنید.");
+                    return;
+                }
+
+                if (timeoutValue < 2 || timeoutValue > 60) {
+                    timeout.setError("Timeout بین 2 تا 60 ثانیه باشد.");
+                    return;
+                }
+
+                if (repeatsValue < 0 || repeatsValue > 10) {
+                    repeats.setError("تعداد تکرار بین 0 تا 10 باشد.");
+                    return;
+                }
+
+                String lang = language.getText().toString()
+                        .trim()
+                        .toLowerCase(java.util.Locale.ROOT);
+
+                if (!lang.equals("fa") && !lang.equals("en") && !lang.equals("bal")) {
+                    language.setError("فقط fa، en یا bal");
+                    return;
+                }
+
+                try {
+                    JSONObject item = existing == null
+                            ? new JSONObject()
+                            : new JSONObject(existing.toString());
+
+                    item.put("name", nameValue);
+                    item.put("greeting", greeting.getText().toString().trim());
+                    item.put("audioSource", audioSource.getText().toString().trim());
+                    item.put("language", lang);
+                    item.put("timeout", timeoutValue);
+                    item.put("repeats", repeatsValue);
+                    item.put("defaultDestination",
+                            defaultDest.getText().toString().trim());
+                    item.put("businessHours",
+                            businessHours.getText().toString().trim());
+
+                    if (!item.has("enabled")) {
+                        item.put("enabled", true);
+                    }
+
+                    JSONObject mappings = new JSONObject();
+                    for (int i = 0; i <= 9; i++) {
+                        String dest = keys[i].getText().toString().trim();
+                        if (!dest.isEmpty()) {
+                            mappings.put(String.valueOf(i), dest);
+                        }
+                    }
+                    item.put("mappings", mappings);
+
+                    JSONArray next = new JSONArray();
+
+                    for (int i = 0; i < ivrList.length(); i++) {
+                        if (i == index) {
+                            next.put(item);
+                        } else {
+                            JSONObject old = ivrList.optJSONObject(i);
+                            if (old != null) next.put(old);
+                        }
+                    }
+
+                    if (index < 0) {
+                        next.put(item);
+                    }
+
+                    prefs.edit()
+                            .putString("pbx_ivrs_json", next.toString())
+                            .apply();
+
+                    ad.dismiss();
+                    showIvrManager();
+
+                } catch (Exception e) {
+                    showToast("ذخیره IVR ناموفق بود.");
+                }
+            });
+        });
+
+        ad.show();
+    }
+
+    private void showIvrPreview(int index) {
+        try {
+            JSONArray ivrs = new JSONArray(
+                    prefs.getString("pbx_ivrs_json", "[]"));
+
+            JSONObject item = ivrs.optJSONObject(index);
+            if (item == null) return;
+
+            StringBuilder message = new StringBuilder();
+
+            message.append("Greeting:\n")
+                    .append(item.optString("greeting", "—"))
+                    .append("\n\n");
+
+            JSONObject mappings = item.optJSONObject("mappings");
+            if (mappings != null) {
+                for (int i = 0; i <= 9; i++) {
+                    String dest = mappings.optString(String.valueOf(i), "");
+                    if (!dest.isEmpty()) {
+                        message.append(i)
+                                .append(" → ")
+                                .append(dest)
+                                .append("\n");
+                    }
+                }
+            }
+
+            message.append("\nTimeout → ")
+                    .append(item.optString("defaultDestination", "—"));
+
+            new AlertDialog.Builder(this)
+                    .setTitle(item.optString("name", "IVR"))
+                    .setMessage(message.toString())
+                    .setPositiveButton("باشه", null)
+                    .show();
+
+        } catch (Exception e) {
+            showToast("پیش‌نمایش IVR ناموفق بود.");
+        }
+    }
+
+    private void setIvrEnabled(int index, boolean enabled) {
+        try {
+            JSONArray ivrs = new JSONArray(
+                    prefs.getString("pbx_ivrs_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < ivrs.length(); i++) {
+                JSONObject item = ivrs.optJSONObject(i);
+                if (item == null) continue;
+
+                JSONObject copy = new JSONObject(item.toString());
+                if (i == index) {
+                    copy.put("enabled", enabled);
+                }
+                next.put(copy);
+            }
+
+            prefs.edit()
+                    .putString("pbx_ivrs_json", next.toString())
+                    .apply();
+
+            showIvrManager();
+
+        } catch (Exception e) {
+            showToast("تغییر وضعیت IVR ناموفق بود.");
+        }
+    }
+
+    private void deleteIvr(int index) {
+        try {
+            JSONArray ivrs = new JSONArray(
+                    prefs.getString("pbx_ivrs_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < ivrs.length(); i++) {
+                if (i == index) continue;
+
+                JSONObject item = ivrs.optJSONObject(i);
+                if (item != null) next.put(item);
+            }
+
+            prefs.edit()
+                    .putString("pbx_ivrs_json", next.toString())
+                    .apply();
+
+            showIvrManager();
+
+        } catch (Exception e) {
+            showToast("حذف IVR ناموفق بود.");
+        }
     }
 
     private void showSipAccountManager() {
