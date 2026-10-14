@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'ir.molido.voip'
     compileSdk 35
-    defaultConfig { applicationId 'ir.molido.voip'; minSdk 26; targetSdk 35; versionCode 23; versionName '0.3.3' }
+    defaultConfig { applicationId 'ir.molido.voip'; minSdk 26; targetSdk 35; versionCode 24; versionName '0.3.4' }
     signingConfigs {
         release {
             def ks = System.getenv('MOLIDO_KEYSTORE_PATH')

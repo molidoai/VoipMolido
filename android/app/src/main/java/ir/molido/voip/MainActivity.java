@@ -117,21 +117,24 @@ public final class MainActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(18), dp(14), dp(18), dp(12));
-        header.setBackground(roundedBg("#111827", 0, null));
+        header.setPadding(dp(18), dp(16), dp(18), dp(14));
+        header.setBackground(roundedBg("#0F172A", 0, null));
         header.setElevation(dp(5));
 
         TextView brand = new TextView(this);
-        brand.setText("MOLIDO VOIP");
+        String homeDisplayName = prefs.getString("display_name", "").trim();
+        brand.setText(homeDisplayName.isEmpty()
+                ? "سلام، کاربر MOLIDO"
+                : "سلام، " + homeDisplayName);
         brand.setTextColor(Color.WHITE);
-        brand.setTextSize(22f);
+        brand.setTextSize(21f);
         brand.setTypeface(Typeface.DEFAULT_BOLD);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("ارتباط هوشمند • امن • سریع");
+        subtitle.setText("تماس امن، ساده و همیشه در دسترس");
         subtitle.setTextColor(Color.rgb(200, 210, 225));
         subtitle.setTextSize(12f);
-        subtitle.setPadding(0, dp(2), 0, 0);
+        subtitle.setPadding(0, dp(3), 0, 0);
 
         LinearLayout headerTop = new LinearLayout(this);
         headerTop.setOrientation(LinearLayout.HORIZONTAL);
@@ -171,15 +174,15 @@ public final class MainActivity extends Activity {
 
         LinearLayout statusCard = new LinearLayout(this);
         statusCard.setOrientation(LinearLayout.VERTICAL);
-        statusCard.setPadding(dp(16), dp(14), dp(16), dp(14));
-        statusCard.setBackground(roundedBg("#FFFFFF", 20, "#E5E7EB"));
+        statusCard.setPadding(dp(16), dp(15), dp(16), dp(15));
+        statusCard.setBackground(roundedBg(darkMode ? "#1F2937" : "#FFFFFF", 22, darkMode ? "#374151" : "#E5E7EB"));
         statusCard.setElevation(dp(3));
 
         TextView profileTitle = new TextView(this);
-        profileTitle.setText("پروفایل اتصال");
+        profileTitle.setText("وضعیت شما");
         profileTitle.setTextSize(13f);
         profileTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        profileTitle.setTextColor(Color.rgb(31, 41, 55));
+        profileTitle.setTextColor(darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
 
         extensionLabel = new TextView(this);
         String ext = prefs.getString("extension", "");
@@ -190,7 +193,7 @@ public final class MainActivity extends Activity {
                         + (ext.isEmpty() ? "—" : ext));
         extensionLabel.setTextSize(16f);
         extensionLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        extensionLabel.setTextColor(Color.rgb(17, 24, 39));
+        extensionLabel.setTextColor(darkMode ? Color.rgb(229, 231, 235) : Color.rgb(17, 24, 39));
         extensionLabel.setPadding(0, dp(5), 0, dp(3));
 
         connectionStatus = new TextView(this);
@@ -254,21 +257,26 @@ public final class MainActivity extends Activity {
         dashboard.addView(statusCard);
 
         TextView dialTitle = new TextView(this);
-        dialTitle.setText("شماره‌گیر");
+        dialTitle.setText("با چه کسی تماس می‌گیری؟");
         dialTitle.setTextSize(15f);
         dialTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        dialTitle.setTextColor(Color.rgb(17, 24, 39));
+        dialTitle.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
         dialTitle.setPadding(dp(2), dp(14), 0, dp(8));
         dashboard.addView(dialTitle);
 
         dialInput = new EditText(this);
-        dialInput.setHint("شماره یا داخلی");
+        dialInput.setHint("شماره یا داخلی را وارد کنید");
         dialInput.setInputType(InputType.TYPE_CLASS_PHONE);
         dialInput.setGravity(Gravity.CENTER);
-        dialInput.setTextSize(22f);
+        dialInput.setTextSize(24f);
         dialInput.setSingleLine(true);
-        dialInput.setPadding(dp(12), dp(12), dp(12), dp(12));
-        dialInput.setBackground(roundedBg("#FFFFFF", 18, "#D1D5DB"));
+        dialInput.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
+        dialInput.setHintTextColor(Color.rgb(156, 163, 175));
+        dialInput.setPadding(dp(14), dp(15), dp(14), dp(15));
+        dialInput.setBackground(roundedBg(
+                darkMode ? "#111827" : "#FFFFFF",
+                22,
+                darkMode ? "#374151" : "#D1D5DB"));
         dashboard.addView(dialInput, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -292,14 +300,17 @@ public final class MainActivity extends Activity {
             for (String key : rowKeys) {
                 Button b = new Button(this);
                 b.setText(key);
-                b.setTextSize(20f);
+                b.setTextSize(22f);
                 b.setAllCaps(false);
-                b.setTextColor(Color.rgb(17, 24, 39));
-                b.setBackground(roundedBg("#F9FAFB", 20, "#E5E7EB"));
+                b.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
+                b.setBackground(roundedBg(
+                        darkMode ? "#1F2937" : "#FFFFFF",
+                        26,
+                        darkMode ? "#374151" : "#E5E7EB"));
                 b.setOnClickListener(v -> dialInput.append(((Button) v).getText()));
 
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        0, dp(56), 1f);
+                        0, dp(62), 1f);
                 lp.setMargins(dp(4), dp(4), dp(4), dp(4));
                 row.addView(b, lp);
             }
@@ -314,13 +325,13 @@ public final class MainActivity extends Activity {
         callActions.setGravity(Gravity.CENTER);
 
         callButton = new Button(this);
-        callButton.setText("تماس");
+        callButton.setText("شروع تماس");
         callButton.setAllCaps(false);
         stylePrimaryButton(callButton);
         callButton.setOnClickListener(v -> beginOutgoingCall());
 
         Button clearButton = new Button(this);
-        clearButton.setText("پاک");
+        clearButton.setText("پاک کردن");
         clearButton.setAllCaps(false);
         styleSecondaryButton(clearButton);
         clearButton.setOnClickListener(v -> dialInput.setText(""));
@@ -337,6 +348,48 @@ public final class MainActivity extends Activity {
 
         dashboard.addView(callActions);
 
+        TextView quickTitle = new TextView(this);
+        quickTitle.setText("دسترسی سریع");
+        quickTitle.setTextSize(14f);
+        quickTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        quickTitle.setTextColor(darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
+        quickTitle.setPadding(dp(2), dp(16), 0, dp(8));
+        dashboard.addView(quickTitle);
+
+        LinearLayout smartQuick = new LinearLayout(this);
+        smartQuick.setOrientation(LinearLayout.HORIZONTAL);
+        smartQuick.setGravity(Gravity.CENTER);
+
+        Button quickRegister = new Button(this);
+        quickRegister.setText("SIP");
+        quickRegister.setAllCaps(false);
+        styleSecondaryButton(quickRegister);
+        quickRegister.setOnClickListener(v -> {
+            if (isSipProfileReady()) startSipRegistration();
+            else showSettingsHub();
+        });
+
+        Button quickSettings = new Button(this);
+        quickSettings.setText("تنظیمات");
+        quickSettings.setAllCaps(false);
+        styleSecondaryButton(quickSettings);
+        quickSettings.setOnClickListener(v -> showSettingsHub());
+
+        Button quickUpdate = new Button(this);
+        quickUpdate.setText("آپدیت");
+        quickUpdate.setAllCaps(false);
+        styleSecondaryButton(quickUpdate);
+        quickUpdate.setOnClickListener(v -> checkUpdates(true));
+
+        LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        qlp.setMargins(dp(3), 0, dp(3), 0);
+
+        smartQuick.addView(quickRegister, qlp);
+        smartQuick.addView(quickSettings, qlp);
+        smartQuick.addView(quickUpdate, qlp);
+        dashboard.addView(smartQuick);
+
         LinearLayout callCard = new LinearLayout(this);
         callCard.setOrientation(LinearLayout.VERTICAL);
         callCard.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -346,7 +399,7 @@ public final class MainActivity extends Activity {
                 darkMode ? "#374151" : "#E5E7EB"));
 
         callStatus = new TextView(this);
-        callStatus.setText("تماس فعال نیست");
+        callStatus.setText("آماده تماس");
         callStatus.setTextSize(14f);
         callStatus.setTypeface(Typeface.DEFAULT_BOLD);
         callStatus.setTextColor(
@@ -431,18 +484,24 @@ public final class MainActivity extends Activity {
         quickActions.setPadding(0, dp(12), 0, dp(6));
 
         Button recentButton = new Button(this);
-        recentButton.setText("تماس‌های اخیر");
+        recentButton.setText("تماس اخیر");
         recentButton.setAllCaps(false);
         styleSecondaryButton(recentButton);
-        recentButton.setOnClickListener(v ->
-                showToast("تاریخچه تماس در فاز بعدی فعال می‌شود."));
+        recentButton.setOnClickListener(v -> {
+            String last = prefs.getString("last_call_number", "").trim();
+            if (last.isEmpty()) {
+                showToast("هنوز تماس ثبت نشده است.");
+            } else {
+                dialInput.setText(last);
+                dialInput.setSelection(last.length());
+            }
+        });
 
         Button contactsButton = new Button(this);
-        contactsButton.setText("مخاطبین");
+        contactsButton.setText("QR");
         contactsButton.setAllCaps(false);
         styleSecondaryButton(contactsButton);
-        contactsButton.setOnClickListener(v ->
-                showToast("مخاطبین در فاز بعدی فعال می‌شوند."));
+        contactsButton.setOnClickListener(v -> startQrScan());
 
         LinearLayout.LayoutParams q1 = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -472,13 +531,21 @@ public final class MainActivity extends Activity {
                 18,
                 darkMode ? "#374151" : "#E5E7EB"));
 
+        String lastCallNumber = prefs.getString("last_call_number", "").trim();
+        String lastCallResult = prefs.getString("last_call_result", "").trim();
+
         TextView h1 = new TextView(this);
-        h1.setText("هنوز تماس واقعی ثبت نشده است");
-        h1.setTextSize(13f);
+        h1.setText(lastCallNumber.isEmpty()
+                ? "هنوز تماسی ثبت نشده"
+                : lastCallNumber);
+        h1.setTextSize(14f);
+        h1.setTypeface(Typeface.DEFAULT_BOLD);
         h1.setTextColor(darkMode ? Color.rgb(229, 231, 235) : Color.rgb(55, 65, 81));
 
         TextView h2 = new TextView(this);
-        h2.setText("پس از فعال شدن SIP، سه تماس آخر اینجا نمایش داده می‌شود.");
+        h2.setText(lastCallNumber.isEmpty()
+                ? "اولین تماس شما بعد از برقراری SIP اینجا دیده می‌شود."
+                : (lastCallResult.isEmpty() ? "آخرین تماس" : lastCallResult));
         h2.setTextSize(11f);
         h2.setTextColor(Color.rgb(156, 163, 175));
         h2.setPadding(0, dp(3), 0, 0);
@@ -488,7 +555,7 @@ public final class MainActivity extends Activity {
         dashboard.addView(historyCard);
 
         TextView webTitle = new TextView(this);
-        webTitle.setText("پنل وب MOLIDO");
+        webTitle.setText("خدمات MOLIDO");
         webTitle.setTextSize(13f);
         webTitle.setTypeface(Typeface.DEFAULT_BOLD);
         webTitle.setTextColor(Color.rgb(75, 85, 99));
@@ -515,7 +582,7 @@ public final class MainActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView version = new TextView(this);
-        version.setText("MOLIDO VOIP  •  v" + BuildConfig.VERSION_NAME);
+        version.setText("MOLIDO  •  v" + BuildConfig.VERSION_NAME);
         version.setTextSize(12f);
         version.setTextColor(darkMode ? Color.rgb(229, 231, 235) : Color.rgb(55, 65, 81));
         version.setTypeface(Typeface.DEFAULT_BOLD);
