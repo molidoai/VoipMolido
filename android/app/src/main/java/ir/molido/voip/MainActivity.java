@@ -52,6 +52,7 @@ public final class MainActivity extends Activity {
     private static final int REQ_MIC = 4102;
     private static final int REQ_CONTACTS = 4103;
     private static final int REQ_INSTALL_UNKNOWN = 4104;
+    private static final int REQ_CAMERA = 4105;
 
     private WebView web;
     private TextView updateStatus;
@@ -260,7 +261,7 @@ public final class MainActivity extends Activity {
         more.setTextSize(22f);
         more.setAllCaps(false);
         styleSecondaryButton(more);
-        more.setOnClickListener(v -> showMoreCenter());
+        more.setOnClickListener(v -> showNavigationDrawer());
 
         header.addView(more);
         root.addView(header);
@@ -915,6 +916,112 @@ public final class MainActivity extends Activity {
                 .show();
     }
 
+    private void showNavigationDrawer() {
+        final android.app.Dialog drawer = new android.app.Dialog(this);
+        drawer.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(18), dp(22), dp(18), dp(18));
+        panel.setBackgroundColor(
+                darkMode ? Color.rgb(17, 24, 39) : Color.WHITE);
+
+        TextView title = new TextView(this);
+        title.setText("MOLIDO");
+        title.setTextSize(24f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(Color.rgb(56, 189, 248));
+        title.setPadding(dp(8), 0, dp(8), dp(16));
+        panel.addView(title);
+
+        String[] labels = {
+                "صفحه‌کلید",
+                "مخاطبین",
+                "تماس‌های اخیر",
+                "پیام‌ها",
+                "اسکن QR",
+                "مرکز بروزرسانی",
+                "تنظیمات",
+                "درباره"
+        };
+
+        for (int i = 0; i < labels.length; i++) {
+            final int index = i;
+
+            TextView item = new TextView(this);
+            item.setText(labels[i]);
+            item.setTextSize(16f);
+            item.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+            item.setTextColor(
+                    darkMode ? Color.WHITE : Color.rgb(15, 23, 42));
+            item.setPadding(dp(16), dp(15), dp(16), dp(15));
+            item.setBackground(
+                    roundedBg(
+                            darkMode ? "#1F2937" : "#F8FAFC",
+                            14,
+                            darkMode ? "#374151" : "#E2E8F0"));
+
+            LinearLayout.LayoutParams lp =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, dp(4), 0, dp(4));
+            panel.addView(item, lp);
+
+            item.setOnClickListener(v -> {
+                drawer.dismiss();
+
+                if (index == 0) {
+                    if (dialInput != null) dialInput.requestFocus();
+                } else if (index == 1) {
+                    showContactsCenter();
+                } else if (index == 2) {
+                    showCallHistory();
+                } else if (index == 3) {
+                    showMessagesCenter();
+                } else if (index == 4) {
+                    startQrScan();
+                } else if (index == 5) {
+                    showUpdateCenter();
+                } else if (index == 6) {
+                    showSettingsHub();
+                } else {
+                    showSettingsInfo(
+                            "MOLIDO VoIP",
+                            "Version " + BuildConfig.VERSION_NAME);
+                }
+            });
+        }
+
+        drawer.setContentView(panel);
+        drawer.show();
+
+        android.view.Window window = drawer.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(
+                    new android.graphics.drawable.ColorDrawable(
+                            android.graphics.Color.TRANSPARENT));
+            window.setGravity(Gravity.RIGHT);
+            window.setLayout(
+                    (int) (getResources()
+                            .getDisplayMetrics()
+                            .widthPixels * 0.82f),
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+
+            android.view.WindowManager.LayoutParams attrs =
+                    window.getAttributes();
+            attrs.width = (int) (getResources()
+                    .getDisplayMetrics()
+                    .widthPixels * 0.82f);
+            attrs.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            attrs.gravity = Gravity.RIGHT;
+            attrs.dimAmount = 0.45f;
+            window.setAttributes(attrs);
+            window.addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+    }
+
     private void showMoreCenter() {
         String[] items = {
                 "تنظیمات",
@@ -1088,12 +1195,30 @@ public final class MainActivity extends Activity {
     }
 
     private void startQrScan() {
-        IntentIntegrator integrator = new IntentIntegrator(this);
-        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
-        integrator.setPrompt("QR تنظیمات MOLIDO VOIP را اسکن کنید");
-        integrator.setBeepEnabled(false);
-        integrator.setOrientationLocked(false);
-        integrator.initiateScan();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.CAMERA},
+                    REQ_CAMERA);
+            return;
+        }
+
+        launchQrScanner();
+    }
+
+    private void launchQrScanner() {
+        try {
+            IntentIntegrator integrator = new IntentIntegrator(this);
+            integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+            integrator.setPrompt("QR تنظیمات MOLIDO VOIP را اسکن کنید");
+            integrator.setBeepEnabled(false);
+            integrator.setOrientationLocked(false);
+            integrator.setCameraId(0);
+            integrator.initiateScan();
+        } catch (Exception e) {
+            showToast("باز کردن دوربین QR ممکن نشد.");
+        }
     }
 
     @Override
@@ -3850,6 +3975,15 @@ public final class MainActivity extends Activity {
                 showContactsDialog();
             } else {
                 showToast("برای نمایش مخاطبین، اجازه Contacts لازم است.");
+            }
+        }
+
+        if (requestCode == REQ_CAMERA) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                launchQrScanner();
+            } else {
+                showToast("برای اسکن QR، اجازه دوربین لازم است.");
             }
         }
     }
