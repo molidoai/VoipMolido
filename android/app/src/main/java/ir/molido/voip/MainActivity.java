@@ -331,7 +331,11 @@ public final class MainActivity extends Activity {
         callCard.addView(callStatus);
 
         audioQuality = new TextView(this);
-        audioQuality.setText("Smart Audio • آماده پایش شبکه");
+        String configuredStun = prefs.getString("stun_server", "").trim();
+        audioQuality.setText(
+                configuredStun.isEmpty()
+                        ? "Smart Audio • ICE آماده • STUN تنظیم نشده"
+                        : "Smart Audio • ICE + STUN آماده");
         audioQuality.setTextSize(11f);
         audioQuality.setTextColor(
                 darkMode ? Color.rgb(156, 163, 175) : Color.rgb(107, 114, 128));
@@ -734,6 +738,10 @@ public final class MainActivity extends Activity {
                 "SIP Registrar / Domain (مثال: pbx.example.com:5061)",
                 prefs.getString("sip_registrar", ""));
 
+        EditText stunServer = field(
+                "STUN Server (اختیاری، مثال: stun.example.com:3478)",
+                prefs.getString("stun_server", ""));
+
         EditText sipUsername = field("SIP Username",
                 prefs.getString("sip_username", ""));
 
@@ -759,6 +767,7 @@ public final class MainActivity extends Activity {
         form.addView(tenant);
         form.addView(extension);
         form.addView(sipRegistrar);
+        form.addView(stunServer);
         form.addView(sipUsername);
         form.addView(sipPassword);
         form.addView(transport);
@@ -822,6 +831,7 @@ public final class MainActivity extends Activity {
                         .putString("tenant", tenant.getText().toString().trim())
                         .putString("extension", extension.getText().toString().trim())
                         .putString("sip_registrar", sipRegistrar.getText().toString().trim())
+                        .putString("stun_server", stunServer.getText().toString().trim())
                         .putString("sip_username", sipUsername.getText().toString().trim())
                         .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
@@ -1015,6 +1025,9 @@ public final class MainActivity extends Activity {
             registerButton.setText("Connecting…");
             connectionStatus.setText("●  Connecting…");
             connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+
+            sipManager.setStunServer(
+                    prefs.getString("stun_server", "").trim());
 
             sipManager.register(
                     registrar,

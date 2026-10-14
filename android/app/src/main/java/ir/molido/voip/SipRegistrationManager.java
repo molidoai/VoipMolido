@@ -11,6 +11,7 @@ import org.linphone.core.CallStats;
 import org.linphone.core.Core;
 import org.linphone.core.CoreListenerStub;
 import org.linphone.core.Factory;
+import org.linphone.core.NatPolicy;
 import org.linphone.core.PayloadType;
 import org.linphone.core.RegistrationState;
 import org.linphone.core.TransportType;
@@ -44,6 +45,7 @@ public final class SipRegistrationManager {
     private Call currentCall;
     private boolean registered;
     private String registeredDomain = "";
+    private String stunServer = "";
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -148,6 +150,13 @@ public final class SipRegistrationManager {
 
     public void setAudioQualityListener(AudioQualityListener listener) {
         this.audioQualityListener = listener;
+    }
+
+    public synchronized void setStunServer(String server) {
+        stunServer = clean(server);
+        if (core != null) {
+            configureNatTraversal(core);
+        }
     }
 
     public synchronized void register(
@@ -369,6 +378,26 @@ public final class SipRegistrationManager {
 
         account = null;
         authInfo = null;
+    }
+
+    private void configureNatTraversal(Core targetCore) {
+        try {
+            NatPolicy policy = targetCore.createNatPolicy();
+            policy.setIceEnabled(true);
+            policy.setUpnpEnabled(false);
+            policy.setTurnEnabled(false);
+
+            if (!stunServer.isEmpty()) {
+                policy.setStunServer(stunServer);
+                policy.setStunEnabled(true);
+                policy.resolveStunServer();
+            } else {
+                policy.setStunEnabled(false);
+            }
+
+            targetCore.setNatPolicy(policy);
+        } catch (Exception ignored) {
+        }
     }
 
     private void configureHdAudio(Core targetCore) {
