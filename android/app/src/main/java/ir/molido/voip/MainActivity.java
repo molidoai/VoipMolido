@@ -150,6 +150,7 @@ public final class MainActivity extends Activity {
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         secureStore = new SecureStore(this);
+        ensureSipAccountProfiles();
 
         sipManager = new SipRegistrationManager(
                 this,
@@ -940,6 +941,7 @@ public final class MainActivity extends Activity {
                 "مخاطبین",
                 "تماس‌های اخیر",
                 "پیام‌ها",
+                "حساب‌های SIP",
                 "اسکن QR",
                 "مرکز بروزرسانی",
                 "تنظیمات",
@@ -981,10 +983,12 @@ public final class MainActivity extends Activity {
                 } else if (index == 3) {
                     showMessagesCenter();
                 } else if (index == 4) {
-                    startQrScan();
+                    showSipAccounts();
                 } else if (index == 5) {
-                    showUpdateCenter();
+                    startQrScan();
                 } else if (index == 6) {
+                    showUpdateCenter();
+                } else if (index == 7) {
                     showSettingsHub();
                 } else {
                     showSettingsInfo(
@@ -1353,6 +1357,325 @@ public final class MainActivity extends Activity {
         return value == null || value.isEmpty() ? "—" : value;
     }
 
+    private void ensureSipAccountProfiles() {
+        if (prefs.getBoolean("sip_accounts_initialized", false)) {
+            return;
+        }
+
+        String registrar = prefs.getString("sip_registrar", "").trim();
+        String transport = prefs.getString("sip_transport", "TLS").trim();
+        String display = prefs.getString("display_name", "").trim();
+
+        SharedPreferences.Editor e = prefs.edit();
+
+        e.putString("sip_account_name_1", "اکانت 1001");
+        e.putString("sip_account_extension_1", "1001");
+        e.putString("sip_account_username_1", "1001");
+        e.putString("sip_account_registrar_1", registrar);
+        e.putString("sip_account_transport_1", transport);
+        e.putString(
+                "sip_account_display_1",
+                display.isEmpty() ? "1001" : display);
+
+        e.putString("sip_account_name_2", "اکانت 1002");
+        e.putString("sip_account_extension_2", "1002");
+        e.putString("sip_account_username_2", "1002");
+        e.putString("sip_account_registrar_2", registrar);
+        e.putString("sip_account_transport_2", transport);
+        e.putString("sip_account_display_2", "1002");
+
+        e.putBoolean("sip_accounts_initialized", true);
+        e.apply();
+
+        try {
+            String legacy = secureStore.getSecret("sip_password");
+            if (legacy != null && !legacy.isEmpty()) {
+                secureStore.putSecret("sip_account_password_1", legacy);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void showSipAccounts() {
+        int active = prefs.getInt("active_sip_account", 0);
+
+        String[] rows = new String[2];
+        for (int i = 1; i <= 2; i++) {
+            String name = prefs.getString(
+                    "sip_account_name_" + i,
+                    i == 1 ? "اکانت 1001" : "اکانت 1002");
+
+            String username = prefs.getString(
+                    "sip_account_username_" + i,
+                    i == 1 ? "1001" : "1002");
+
+            String registrar = prefs.getString(
+                    "sip_account_registrar_" + i,
+                    "").trim();
+
+            boolean hasPassword = hasSipAccountPassword(i);
+
+            rows[i - 1] =
+                    (active == i ? "● " : "○ ")
+                    + name
+                    + "  •  " + username
+                    + (registrar.isEmpty() ? "  •  سرور تنظیم نشده" : "")
+                    + (!hasPassword ? "  •  رمز تنظیم نشده" : "");
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("حساب‌های SIP")
+                .setItems(rows, (dialog, which) ->
+                        showSipAccountActions(which + 1))
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showSipAccountActions(int account) {
+        String name = prefs.getString(
+                "sip_account_name_" + account,
+                account == 1 ? "اکانت 1001" : "اکانت 1002");
+
+        String[] actions = {
+                "فعال کردن این حساب",
+                "ویرایش حساب"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle(name)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        activateSipAccount(account);
+                    } else {
+                        editSipAccount(account);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void editSipAccount(int account) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        EditText name = field(
+                "نام حساب",
+                prefs.getString(
+                        "sip_account_name_" + account,
+                        account == 1 ? "اکانت 1001" : "اکانت 1002"));
+
+        EditText extension = field(
+                "Extension",
+                prefs.getString(
+                        "sip_account_extension_" + account,
+                        account == 1 ? "1001" : "1002"));
+
+        EditText registrar = field(
+                "SIP Registrar / Domain",
+                prefs.getString(
+                        "sip_account_registrar_" + account,
+                        ""));
+
+        EditText username = field(
+                "SIP Username",
+                prefs.getString(
+                        "sip_account_username_" + account,
+                        account == 1 ? "1001" : "1002"));
+
+        EditText password = field("SIP Password", "");
+        password.setInputType(
+                InputType.TYPE_CLASS_TEXT
+                        | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        password.setHint(
+                hasSipAccountPassword(account)
+                        ? "رمز ذخیره شده • برای تغییر، رمز جدید را وارد کنید"
+                        : "SIP Password");
+
+        EditText transport = field(
+                "Transport: TLS / TCP / UDP",
+                prefs.getString(
+                        "sip_account_transport_" + account,
+                        "TLS"));
+
+        EditText display = field(
+                "نام نمایشی",
+                prefs.getString(
+                        "sip_account_display_" + account,
+                        account == 1 ? "1001" : "1002"));
+
+        form.addView(name);
+        form.addView(extension);
+        form.addView(registrar);
+        form.addView(username);
+        form.addView(password);
+        form.addView(transport);
+        form.addView(display);
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle("ویرایش حساب " + account)
+                .setView(form)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ذخیره", null)
+                .create();
+
+        ad.setOnShowListener(d -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE)
+                    .setOnClickListener(v -> {
+                        String transportValue =
+                                transport.getText().toString()
+                                        .trim()
+                                        .toUpperCase(
+                                                java.util.Locale.ROOT);
+
+                        if (!transportValue.equals("TLS")
+                                && !transportValue.equals("TCP")
+                                && !transportValue.equals("UDP")) {
+                            transport.setError(
+                                    "فقط TLS، TCP یا UDP مجاز است.");
+                            return;
+                        }
+
+                        String userValue =
+                                username.getText().toString().trim();
+                        if (userValue.isEmpty()) {
+                            username.setError("Username لازم است.");
+                            return;
+                        }
+
+                        String registrarValue =
+                                registrar.getText().toString().trim();
+
+                        prefs.edit()
+                                .putString(
+                                        "sip_account_name_" + account,
+                                        name.getText().toString().trim())
+                                .putString(
+                                        "sip_account_extension_" + account,
+                                        extension.getText().toString().trim())
+                                .putString(
+                                        "sip_account_registrar_" + account,
+                                        registrarValue)
+                                .putString(
+                                        "sip_account_username_" + account,
+                                        userValue)
+                                .putString(
+                                        "sip_account_transport_" + account,
+                                        transportValue)
+                                .putString(
+                                        "sip_account_display_" + account,
+                                        display.getText().toString().trim())
+                                .apply();
+
+                        String newPassword =
+                                password.getText().toString();
+
+                        if (!newPassword.isEmpty()) {
+                            try {
+                                secureStore.putSecret(
+                                        "sip_account_password_" + account,
+                                        newPassword);
+                            } catch (Exception e) {
+                                showToast("ذخیره امن رمز ناموفق بود.");
+                                return;
+                            }
+                        }
+
+                        ad.dismiss();
+                        showToast("حساب " + account + " ذخیره شد.");
+                    });
+        });
+
+        ad.show();
+    }
+
+    private boolean hasSipAccountPassword(int account) {
+        try {
+            String value = secureStore.getSecret(
+                    "sip_account_password_" + account);
+            return value != null && !value.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void activateSipAccount(int account) {
+        if (sipManager != null && sipManager.hasActiveCall()) {
+            showToast("هنگام تماس فعال نمی‌توان حساب را عوض کرد.");
+            return;
+        }
+
+        String registrar = prefs.getString(
+                "sip_account_registrar_" + account,
+                "").trim();
+
+        String username = prefs.getString(
+                "sip_account_username_" + account,
+                "").trim();
+
+        if (registrar.isEmpty()) {
+            showToast("ابتدا SIP Registrar این حساب را تنظیم کنید.");
+            editSipAccount(account);
+            return;
+        }
+
+        if (username.isEmpty()) {
+            showToast("SIP Username این حساب تنظیم نشده.");
+            editSipAccount(account);
+            return;
+        }
+
+        String password;
+        try {
+            password = secureStore.getSecret(
+                    "sip_account_password_" + account);
+        } catch (Exception e) {
+            password = null;
+        }
+
+        if (password == null || password.isEmpty()) {
+            showToast("ابتدا رمز SIP این حساب را وارد کنید.");
+            editSipAccount(account);
+            return;
+        }
+
+        String extension = prefs.getString(
+                "sip_account_extension_" + account,
+                username);
+
+        String transport = prefs.getString(
+                "sip_account_transport_" + account,
+                "TLS");
+
+        String display = prefs.getString(
+                "sip_account_display_" + account,
+                username);
+
+        try {
+            secureStore.putSecret("sip_password", password);
+        } catch (Exception e) {
+            showToast("فعال‌سازی امن حساب ناموفق بود.");
+            return;
+        }
+
+        prefs.edit()
+                .putInt("active_sip_account", account)
+                .putString("sip_registrar", registrar)
+                .putString("sip_username", username)
+                .putString("extension", extension)
+                .putString("sip_transport", transport)
+                .putString("display_name", display)
+                .apply();
+
+        try {
+            if (sipManager != null) {
+                sipManager.unregister();
+            }
+        } catch (Exception ignored) {}
+
+        showToast("حساب " + username + " فعال شد.");
+        recreate();
+    }
+
     private void showSettingsHub() {
         if (adminUnlocked && !isAdminSessionValid()) {
             adminUnlocked = false;
@@ -1394,7 +1717,14 @@ public final class MainActivity extends Activity {
                 "حساب من",
                 accountSummary(),
                 () -> {
-                    if (adminUnlocked) {
+                    addSettingsSection(
+                root,
+                "☎",
+                "حساب‌های SIP",
+                "1001 • 1002",
+                () -> showSipAccounts());
+
+        if (adminUnlocked) {
                         showSettings();
                     } else {
                         showSettingsInfo(
@@ -3784,6 +4114,35 @@ public final class MainActivity extends Activity {
                         .putString("display_name", displayName.getText().toString().trim())
                         .putString("language", language.getText().toString().trim())
                         .apply();
+
+                int activeAccount = prefs.getInt("active_sip_account", 0);
+                if (activeAccount == 1 || activeAccount == 2) {
+                    prefs.edit()
+                            .putString(
+                                    "sip_account_extension_" + activeAccount,
+                                    extension.getText().toString().trim())
+                            .putString(
+                                    "sip_account_registrar_" + activeAccount,
+                                    sipRegistrar.getText().toString().trim())
+                            .putString(
+                                    "sip_account_username_" + activeAccount,
+                                    sipUsername.getText().toString().trim())
+                            .putString(
+                                    "sip_account_transport_" + activeAccount,
+                                    transportValue)
+                            .putString(
+                                    "sip_account_display_" + activeAccount,
+                                    displayName.getText().toString().trim())
+                            .apply();
+
+                    if (!newPassword.isEmpty()) {
+                        try {
+                            secureStore.putSecret(
+                                    "sip_account_password_" + activeAccount,
+                                    newPassword);
+                        } catch (Exception ignored) {}
+                    }
+                }
 
                 showToast("تنظیمات و Credential امن ذخیره شد.");
                 ad.dismiss();
