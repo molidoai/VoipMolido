@@ -42,6 +42,9 @@ public final class MainActivity extends Activity {
     private WebView web;
     private TextView updateStatus;
     private Button updateButton;
+    private TextView connectionStatus;
+    private TextView extensionLabel;
+    private EditText dialInput;
     private SharedPreferences prefs;
 
     private static final class UpdateInfo {
@@ -89,12 +92,184 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        ScrollView dashboardScroll = new ScrollView(this);
+        LinearLayout dashboard = new LinearLayout(this);
+        dashboard.setOrientation(LinearLayout.VERTICAL);
+        dashboard.setPadding(dp(12), dp(10), dp(12), dp(12));
+        dashboardScroll.addView(dashboard);
+
+        LinearLayout statusCard = new LinearLayout(this);
+        statusCard.setOrientation(LinearLayout.VERTICAL);
+        statusCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        statusCard.setBackground(roundedBg("#FFFFFF", 20, "#E5E7EB"));
+        statusCard.setElevation(dp(3));
+
+        TextView profileTitle = new TextView(this);
+        profileTitle.setText("پروفایل اتصال");
+        profileTitle.setTextSize(13f);
+        profileTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        profileTitle.setTextColor(Color.rgb(31, 41, 55));
+
+        extensionLabel = new TextView(this);
+        String ext = prefs.getString("extension", "");
+        String displayName = prefs.getString("display_name", "");
+        extensionLabel.setText(
+                (displayName.isEmpty() ? "کاربر MOLIDO" : displayName)
+                        + "  •  داخلی "
+                        + (ext.isEmpty() ? "—" : ext));
+        extensionLabel.setTextSize(16f);
+        extensionLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        extensionLabel.setTextColor(Color.rgb(17, 24, 39));
+        extensionLabel.setPadding(0, dp(5), 0, dp(3));
+
+        connectionStatus = new TextView(this);
+        connectionStatus.setText("●  آماده برای اتصال SIP");
+        connectionStatus.setTextSize(12f);
+        connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+
+        statusCard.addView(profileTitle);
+        statusCard.addView(extensionLabel);
+        statusCard.addView(connectionStatus);
+        dashboard.addView(statusCard);
+
+        TextView dialTitle = new TextView(this);
+        dialTitle.setText("شماره‌گیر");
+        dialTitle.setTextSize(15f);
+        dialTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        dialTitle.setTextColor(Color.rgb(17, 24, 39));
+        dialTitle.setPadding(dp(2), dp(14), 0, dp(8));
+        dashboard.addView(dialTitle);
+
+        dialInput = new EditText(this);
+        dialInput.setHint("شماره یا داخلی");
+        dialInput.setInputType(InputType.TYPE_CLASS_PHONE);
+        dialInput.setGravity(Gravity.CENTER);
+        dialInput.setTextSize(22f);
+        dialInput.setSingleLine(true);
+        dialInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        dialInput.setBackground(roundedBg("#FFFFFF", 18, "#D1D5DB"));
+        dashboard.addView(dialInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout keypad = new LinearLayout(this);
+        keypad.setOrientation(LinearLayout.VERTICAL);
+        keypad.setPadding(0, dp(10), 0, 0);
+
+        String[][] keys = {
+                {"1", "2", "3"},
+                {"4", "5", "6"},
+                {"7", "8", "9"},
+                {"*", "0", "#"}
+        };
+
+        for (String[] rowKeys : keys) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER);
+
+            for (String key : rowKeys) {
+                Button b = new Button(this);
+                b.setText(key);
+                b.setTextSize(20f);
+                b.setAllCaps(false);
+                b.setTextColor(Color.rgb(17, 24, 39));
+                b.setBackground(roundedBg("#F9FAFB", 20, "#E5E7EB"));
+                b.setOnClickListener(v -> dialInput.append(((Button) v).getText()));
+
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        0, dp(56), 1f);
+                lp.setMargins(dp(4), dp(4), dp(4), dp(4));
+                row.addView(b, lp);
+            }
+
+            keypad.addView(row);
+        }
+
+        dashboard.addView(keypad);
+
+        LinearLayout callActions = new LinearLayout(this);
+        callActions.setOrientation(LinearLayout.HORIZONTAL);
+        callActions.setGravity(Gravity.CENTER);
+
+        Button callButton = new Button(this);
+        callButton.setText("تماس");
+        callButton.setAllCaps(false);
+        stylePrimaryButton(callButton);
+        callButton.setOnClickListener(v -> {
+            String number = dialInput.getText().toString().trim();
+            if (number.isEmpty()) {
+                showToast("شماره یا داخلی را وارد کنید.");
+            } else {
+                showToast("SIP در فاز بعدی فعال می‌شود: " + number);
+            }
+        });
+
+        Button clearButton = new Button(this);
+        clearButton.setText("پاک");
+        clearButton.setAllCaps(false);
+        styleSecondaryButton(clearButton);
+        clearButton.setOnClickListener(v -> dialInput.setText(""));
+
+        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        callLp.setMargins(0, dp(8), dp(5), 0);
+        callActions.addView(callButton, callLp);
+
+        LinearLayout.LayoutParams clearLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        clearLp.setMargins(dp(5), dp(8), 0, 0);
+        callActions.addView(clearButton, clearLp);
+
+        dashboard.addView(callActions);
+
+        LinearLayout quickActions = new LinearLayout(this);
+        quickActions.setOrientation(LinearLayout.HORIZONTAL);
+        quickActions.setGravity(Gravity.CENTER);
+        quickActions.setPadding(0, dp(12), 0, dp(6));
+
+        Button recentButton = new Button(this);
+        recentButton.setText("تماس‌های اخیر");
+        recentButton.setAllCaps(false);
+        styleSecondaryButton(recentButton);
+        recentButton.setOnClickListener(v ->
+                showToast("تاریخچه تماس در فاز بعدی فعال می‌شود."));
+
+        Button contactsButton = new Button(this);
+        contactsButton.setText("مخاطبین");
+        contactsButton.setAllCaps(false);
+        styleSecondaryButton(contactsButton);
+        contactsButton.setOnClickListener(v ->
+                showToast("مخاطبین در فاز بعدی فعال می‌شوند."));
+
+        LinearLayout.LayoutParams q1 = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        q1.setMargins(0, 0, dp(5), 0);
+        quickActions.addView(recentButton, q1);
+
+        LinearLayout.LayoutParams q2 = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        q2.setMargins(dp(5), 0, 0, 0);
+        quickActions.addView(contactsButton, q2);
+
+        dashboard.addView(quickActions);
+
+        TextView webTitle = new TextView(this);
+        webTitle.setText("پنل وب MOLIDO");
+        webTitle.setTextSize(13f);
+        webTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        webTitle.setTextColor(Color.rgb(75, 85, 99));
+        webTitle.setPadding(dp(2), dp(12), 0, dp(6));
+        dashboard.addView(webTitle);
+
         web = new WebView(this);
         web.setBackgroundColor(Color.WHITE);
         LinearLayout.LayoutParams webLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        webLp.setMargins(dp(10), dp(10), dp(10), dp(8));
-        root.addView(web, webLp);
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(250));
+        dashboard.addView(web, webLp);
+
+        root.addView(dashboardScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
