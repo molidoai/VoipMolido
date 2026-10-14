@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS extensions (
  extension TEXT NOT NULL, display_name TEXT NOT NULL,
  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),
+ caller_id_privacy INTEGER NOT NULL DEFAULT 0 CHECK(caller_id_privacy IN (0,1)),
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(tenant_id,extension)
 );
