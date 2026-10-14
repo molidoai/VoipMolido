@@ -71,6 +71,15 @@ public final class MainActivity extends Activity {
     private Button speakerButton;
     private TextView callStatus;
     private TextView callPeerLabel;
+    private android.app.Dialog fullCallDialog;
+    private TextView fullCallPeer;
+    private TextView fullCallState;
+    private TextView fullCallQuality;
+    private Button fullAnswerButton;
+    private Button fullRejectButton;
+    private Button fullMuteButton;
+    private Button fullSpeakerButton;
+    private Button fullHangupButton;
     private TextView audioQuality;
     private TextView routeStatus;
     private MolidoConnectivityManager connectivityManager;
@@ -3748,6 +3757,8 @@ public final class MainActivity extends Activity {
 
         boolean incoming = "Incoming".equals(state);
 
+        syncFullScreenCallUi(state, peer, active, incoming);
+
         if (answerButton != null) {
             answerButton.setVisibility(
                     incoming
@@ -3831,6 +3842,338 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void syncFullScreenCallUi(
+            String state,
+            String peer,
+            boolean active,
+            boolean incoming) {
+
+        boolean show =
+                "Incoming".equals(state)
+                        || "Calling".equals(state)
+                        || "Ringing".equals(state)
+                        || "Connected".equals(state);
+
+        if (!show) {
+            if (fullCallDialog != null
+                    && fullCallDialog.isShowing()) {
+                fullCallDialog.dismiss();
+            }
+            return;
+        }
+
+        ensureFullScreenCallDialog();
+
+        String safePeer =
+                peer == null || peer.trim().isEmpty()
+                        ? (incoming ? "تماس ورودی" : "تماس")
+                        : peer.trim();
+
+        if (fullCallPeer != null) {
+            fullCallPeer.setText(safePeer);
+        }
+
+        String humanState;
+        if ("Incoming".equals(state)) {
+            humanState = "تماس ورودی";
+        } else if ("Calling".equals(state)) {
+            humanState = "در حال تماس…";
+        } else if ("Ringing".equals(state)) {
+            humanState = "در حال زنگ خوردن…";
+        } else {
+            humanState = "متصل";
+        }
+
+        if (fullCallState != null) {
+            fullCallState.setText(humanState);
+        }
+
+        if (fullCallQuality != null) {
+            fullCallQuality.setText(
+                    "Connected".equals(state)
+                            ? "کیفیت تماس در حال پایش"
+                            : "MOLIDO VoIP");
+        }
+
+        if (fullAnswerButton != null) {
+            fullAnswerButton.setVisibility(
+                    incoming
+                            ? android.view.View.VISIBLE
+                            : android.view.View.GONE);
+            fullAnswerButton.setEnabled(incoming);
+        }
+
+        if (fullRejectButton != null) {
+            fullRejectButton.setVisibility(
+                    incoming
+                            ? android.view.View.VISIBLE
+                            : android.view.View.GONE);
+            fullRejectButton.setEnabled(incoming);
+        }
+
+        boolean connected =
+                active
+                        && !incoming
+                        && "Connected".equals(state);
+
+        if (fullMuteButton != null) {
+            fullMuteButton.setVisibility(
+                    incoming
+                            ? android.view.View.GONE
+                            : android.view.View.VISIBLE);
+            fullMuteButton.setEnabled(connected);
+        }
+
+        if (fullSpeakerButton != null) {
+            fullSpeakerButton.setVisibility(
+                    incoming
+                            ? android.view.View.GONE
+                            : android.view.View.VISIBLE);
+            fullSpeakerButton.setEnabled(connected);
+        }
+
+        if (fullHangupButton != null) {
+            fullHangupButton.setVisibility(
+                    incoming
+                            ? android.view.View.GONE
+                            : android.view.View.VISIBLE);
+            fullHangupButton.setEnabled(active && !incoming);
+        }
+
+        if (fullCallDialog != null
+                && !fullCallDialog.isShowing()) {
+            fullCallDialog.show();
+
+            android.view.Window window =
+                    fullCallDialog.getWindow();
+
+            if (window != null) {
+                window.setLayout(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT);
+
+                window.setBackgroundDrawable(
+                        new android.graphics.drawable.ColorDrawable(
+                                darkMode
+                                        ? Color.rgb(15, 23, 42)
+                                        : Color.rgb(248, 250, 252)));
+
+                window.setStatusBarColor(
+                        darkMode
+                                ? Color.rgb(15, 23, 42)
+                                : Color.rgb(248, 250, 252));
+
+                window.setNavigationBarColor(
+                        darkMode
+                                ? Color.rgb(15, 23, 42)
+                                : Color.rgb(248, 250, 252));
+            }
+        }
+    }
+
+    private void ensureFullScreenCallDialog() {
+        if (fullCallDialog != null) return;
+
+        final int primaryText =
+                darkMode
+                        ? Color.WHITE
+                        : Color.rgb(15, 23, 42);
+
+        final int secondaryText =
+                darkMode
+                        ? Color.rgb(148, 163, 184)
+                        : Color.rgb(100, 116, 139);
+
+        final int background =
+                darkMode
+                        ? Color.rgb(15, 23, 42)
+                        : Color.rgb(248, 250, 252);
+
+        fullCallDialog = new android.app.Dialog(
+                this,
+                android.R.style.Theme_Material_Light_NoActionBar);
+
+        fullCallDialog.setCancelable(false);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(dp(24), dp(34), dp(24), dp(30));
+        root.setBackgroundColor(background);
+
+        TextView brand = new TextView(this);
+        brand.setText("MOLIDO");
+        brand.setTextSize(15f);
+        brand.setTypeface(Typeface.DEFAULT_BOLD);
+        brand.setGravity(Gravity.CENTER);
+        brand.setTextColor(secondaryText);
+        root.addView(brand);
+
+        TextView avatar = new TextView(this);
+        avatar.setText("☎");
+        avatar.setTextSize(42f);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setTextColor(Color.WHITE);
+        avatar.setBackground(
+                roundedBg("#2563EB", 62, null));
+
+        LinearLayout.LayoutParams avatarLp =
+                new LinearLayout.LayoutParams(dp(124), dp(124));
+        avatarLp.setMargins(0, dp(46), 0, dp(24));
+        root.addView(avatar, avatarLp);
+
+        fullCallPeer = new TextView(this);
+        fullCallPeer.setText("تماس");
+        fullCallPeer.setTextSize(29f);
+        fullCallPeer.setTypeface(Typeface.DEFAULT_BOLD);
+        fullCallPeer.setGravity(Gravity.CENTER);
+        fullCallPeer.setTextColor(primaryText);
+        root.addView(fullCallPeer);
+
+        fullCallState = new TextView(this);
+        fullCallState.setText("در حال برقراری…");
+        fullCallState.setTextSize(15f);
+        fullCallState.setGravity(Gravity.CENTER);
+        fullCallState.setTextColor(secondaryText);
+        fullCallState.setPadding(0, dp(8), 0, 0);
+        root.addView(fullCallState);
+
+        fullCallQuality = new TextView(this);
+        fullCallQuality.setText("MOLIDO VoIP");
+        fullCallQuality.setTextSize(11f);
+        fullCallQuality.setGravity(Gravity.CENTER);
+        fullCallQuality.setTextColor(secondaryText);
+        fullCallQuality.setPadding(0, dp(5), 0, 0);
+        root.addView(fullCallQuality);
+
+        android.widget.Space spacer =
+                new android.widget.Space(this);
+
+        root.addView(
+                spacer,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f));
+
+        LinearLayout incomingRow = new LinearLayout(this);
+        incomingRow.setOrientation(LinearLayout.HORIZONTAL);
+        incomingRow.setGravity(Gravity.CENTER);
+
+        fullRejectButton = new Button(this);
+        fullRejectButton.setText("✕\nرد");
+        fullRejectButton.setTextSize(13f);
+        fullRejectButton.setAllCaps(false);
+        fullRejectButton.setTextColor(Color.WHITE);
+        fullRejectButton.setTypeface(Typeface.DEFAULT_BOLD);
+        fullRejectButton.setBackground(
+                roundedBg("#DC2626", 38, null));
+        fullRejectButton.setOnClickListener(v ->
+                sipManager.rejectIncomingCall());
+
+        fullAnswerButton = new Button(this);
+        fullAnswerButton.setText("☎\nپاسخ");
+        fullAnswerButton.setTextSize(13f);
+        fullAnswerButton.setAllCaps(false);
+        fullAnswerButton.setTextColor(Color.WHITE);
+        fullAnswerButton.setTypeface(Typeface.DEFAULT_BOLD);
+        fullAnswerButton.setBackground(
+                roundedBg("#16A34A", 38, null));
+        fullAnswerButton.setOnClickListener(v ->
+                answerIncomingCall());
+
+        LinearLayout.LayoutParams rejectLp =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(76),
+                        1f);
+        rejectLp.setMargins(0, 0, dp(18), 0);
+
+        LinearLayout.LayoutParams answerLp =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(76),
+                        1f);
+        answerLp.setMargins(dp(18), 0, 0, 0);
+
+        incomingRow.addView(fullRejectButton, rejectLp);
+        incomingRow.addView(fullAnswerButton, answerLp);
+        root.addView(incomingRow);
+
+        LinearLayout tools = new LinearLayout(this);
+        tools.setOrientation(LinearLayout.HORIZONTAL);
+        tools.setGravity(Gravity.CENTER);
+
+        fullMuteButton = new Button(this);
+        fullMuteButton.setText("🎙\nبی‌صدا");
+        fullMuteButton.setTextSize(12f);
+        fullMuteButton.setAllCaps(false);
+        styleSecondaryButton(fullMuteButton);
+        fullMuteButton.setOnClickListener(v -> {
+            boolean muted = sipManager.toggleMute();
+            fullMuteButton.setText(
+                    muted
+                            ? "🎙\nوصل صدا"
+                            : "🎙\nبی‌صدا");
+
+            if (muteButton != null) {
+                muteButton.setText(
+                        muted
+                                ? "🎙\nوصل صدا"
+                                : "🎙\nبی‌صدا");
+            }
+        });
+
+        fullSpeakerButton = new Button(this);
+        fullSpeakerButton.setText("🔊\nبلندگو");
+        fullSpeakerButton.setTextSize(12f);
+        fullSpeakerButton.setAllCaps(false);
+        styleSecondaryButton(fullSpeakerButton);
+        fullSpeakerButton.setOnClickListener(v -> {
+            toggleSpeaker();
+            fullSpeakerButton.setText(
+                    speakerEnabled
+                            ? "🔊\nگوشی"
+                            : "🔊\nبلندگو");
+        });
+
+        LinearLayout.LayoutParams toolLp =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(72),
+                        1f);
+        toolLp.setMargins(dp(7), 0, dp(7), 0);
+
+        tools.addView(fullMuteButton, toolLp);
+        tools.addView(fullSpeakerButton, toolLp);
+
+        LinearLayout.LayoutParams toolsLp =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        toolsLp.setMargins(0, 0, 0, dp(18));
+        root.addView(tools, toolsLp);
+
+        fullHangupButton = new Button(this);
+        fullHangupButton.setText("✕  قطع تماس");
+        fullHangupButton.setTextSize(15f);
+        fullHangupButton.setAllCaps(false);
+        fullHangupButton.setTextColor(Color.WHITE);
+        fullHangupButton.setTypeface(Typeface.DEFAULT_BOLD);
+        fullHangupButton.setBackground(
+                roundedBg("#DC2626", 28, null));
+        fullHangupButton.setOnClickListener(v ->
+                sipManager.terminateCall());
+
+        LinearLayout.LayoutParams hangLp =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(58));
+        root.addView(fullHangupButton, hangLp);
+
+        fullCallDialog.setContentView(root);
+    }
+
     private void updateSmartAudioUi(
             String profile, int score, float loss, float jitter,
             float rtt, float down, float up) {
@@ -3850,6 +4193,12 @@ public final class MainActivity extends Activity {
                     + " • ↓" + Math.round(down) + " ↑" + Math.round(up) + " kbps");
         } else {
             audioQuality.setText("کیفیت تماس • " + label);
+        }
+
+        if (fullCallQuality != null
+                && fullCallDialog != null
+                && fullCallDialog.isShowing()) {
+            fullCallQuality.setText("کیفیت تماس • " + label);
         }
     }
 
