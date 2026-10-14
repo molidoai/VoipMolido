@@ -301,6 +301,14 @@ public final class MainActivity extends Activity {
                 darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
         callCard.addView(callStatus);
 
+        TextView audioQuality = new TextView(this);
+        audioQuality.setText("HD Audio • Opus preferred • Adaptive network");
+        audioQuality.setTextSize(11f);
+        audioQuality.setTextColor(
+                darkMode ? Color.rgb(156, 163, 175) : Color.rgb(107, 114, 128));
+        audioQuality.setPadding(0, dp(4), 0, 0);
+        callCard.addView(audioQuality);
+
         LinearLayout liveControls = new LinearLayout(this);
         liveControls.setOrientation(LinearLayout.HORIZONTAL);
         liveControls.setGravity(Gravity.CENTER);

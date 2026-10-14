@@ -10,8 +10,11 @@ import org.linphone.core.Call;
 import org.linphone.core.Core;
 import org.linphone.core.CoreListenerStub;
 import org.linphone.core.Factory;
+import org.linphone.core.PayloadType;
 import org.linphone.core.RegistrationState;
 import org.linphone.core.TransportType;
+
+import java.util.Arrays;
 
 public final class SipRegistrationManager {
     public interface Listener {
@@ -303,6 +306,8 @@ public final class SipRegistrationManager {
         core.setAutoIterateEnabled(true);
         core.addListener(coreListener);
         core.setUserAgent("MOLIDO-VOIP", BuildConfig.VERSION_NAME);
+
+        configureHdAudio(core);
         core.start();
     }
 
@@ -331,6 +336,67 @@ public final class SipRegistrationManager {
 
         account = null;
         authInfo = null;
+    }
+
+    private void configureHdAudio(Core targetCore) {
+        // Prefer quality while keeping adaptation enabled for unstable mobile networks.
+        targetCore.setEchoCancellationEnabled(true);
+
+        // Echo limiter can reduce full-duplex quality; keep it off unless EC cannot cope.
+        targetCore.setEchoLimiterEnabled(false);
+
+        // Linphone adaptive jitter compensation should stay enabled for VoIP.
+        targetCore.setAudioAdaptiveJittcompEnabled(true);
+
+        // RTCP-driven bitrate adaptation protects audio when network quality changes.
+        targetCore.setAdaptiveRateControlEnabled(true);
+        targetCore.setAdaptiveRateAlgorithm("advanced");
+
+        // Linphone software AGC is documented as experimental; Android hardware/audio
+        // processing is preferred.
+        targetCore.setAgcEnabled(false);
+
+        // Let the OS choose the media port to reduce avoidable local port conflicts.
+        targetCore.setAudioPort(-1);
+
+        preferHdAudioCodecs(targetCore);
+    }
+
+    private void preferHdAudioCodecs(Core targetCore) {
+        try {
+            PayloadType[] codecs = targetCore.getAudioPayloadTypes();
+
+            for (PayloadType codec : codecs) {
+                String mime = codec.getMimeType();
+                if (mime == null) continue;
+
+                if ("opus".equalsIgnoreCase(mime)
+                        || "g722".equalsIgnoreCase(mime)
+                        || "pcmu".equalsIgnoreCase(mime)
+                        || "pcma".equalsIgnoreCase(mime)) {
+                    codec.enable(true);
+                }
+            }
+
+            Arrays.sort(codecs, (a, b) ->
+                    Integer.compare(codecPriority(a), codecPriority(b)));
+
+            targetCore.setAudioPayloadTypes(codecs);
+        } catch (Exception ignored) {
+            // Keep Linphone defaults if codec reordering is unavailable on a device.
+        }
+    }
+
+    private int codecPriority(PayloadType codec) {
+        if (codec == null || codec.getMimeType() == null) return 100;
+
+        String mime = codec.getMimeType().toLowerCase(java.util.Locale.ROOT);
+
+        if ("opus".equals(mime)) return 0;
+        if ("g722".equals(mime)) return 1;
+        if ("pcmu".equals(mime)) return 2;
+        if ("pcma".equals(mime)) return 3;
+        return 20;
     }
 
     private TransportType parseTransport(String value) {
