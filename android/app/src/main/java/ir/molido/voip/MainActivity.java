@@ -332,10 +332,16 @@ public final class MainActivity extends Activity {
 
         audioQuality = new TextView(this);
         String configuredStun = prefs.getString("stun_server", "").trim();
-        audioQuality.setText(
-                configuredStun.isEmpty()
-                        ? "Smart Audio • ICE آماده • STUN تنظیم نشده"
-                        : "Smart Audio • ICE + STUN آماده");
+        String configuredTurn = prefs.getString("turn_transport", "OFF").trim();
+        if (!"OFF".equalsIgnoreCase(configuredTurn)) {
+            audioQuality.setText("Smart Audio • ICE + TURN " +
+                    configuredTurn.toUpperCase(java.util.Locale.ROOT));
+        } else {
+            audioQuality.setText(
+                    configuredStun.isEmpty()
+                            ? "Smart Audio • ICE آماده • STUN تنظیم نشده"
+                            : "Smart Audio • ICE + STUN آماده");
+        }
         audioQuality.setTextSize(11f);
         audioQuality.setTextColor(
                 darkMode ? Color.rgb(156, 163, 175) : Color.rgb(107, 114, 128));
@@ -742,6 +748,25 @@ public final class MainActivity extends Activity {
                 "STUN Server (اختیاری، مثال: stun.example.com:3478)",
                 prefs.getString("stun_server", ""));
 
+        EditText turnServer = field(
+                "TURN Server (اختیاری، مثال: turn.example.com:3478)",
+                prefs.getString("turn_server", ""));
+
+        EditText turnUsername = field(
+                "TURN Username",
+                prefs.getString("turn_username", ""));
+
+        EditText turnPassword = field("TURN Password", "");
+        turnPassword.setInputType(
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        turnPassword.setHint(hasStoredTurnPassword()
+                ? "رمز TURN ذخیره شده • برای تغییر، رمز جدید را وارد کنید"
+                : "TURN Password");
+
+        EditText turnTransport = field(
+                "TURN Mode: OFF / UDP / TCP / TLS",
+                prefs.getString("turn_transport", "OFF"));
+
         EditText sipUsername = field("SIP Username",
                 prefs.getString("sip_username", ""));
 
@@ -768,6 +793,10 @@ public final class MainActivity extends Activity {
         form.addView(extension);
         form.addView(sipRegistrar);
         form.addView(stunServer);
+        form.addView(turnServer);
+        form.addView(turnUsername);
+        form.addView(turnPassword);
+        form.addView(turnTransport);
         form.addView(sipUsername);
         form.addView(sipPassword);
         form.addView(transport);
@@ -815,11 +844,34 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
+                String turnTransportValue = turnTransport.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+                if (!turnTransportValue.equals("OFF")
+                        && !turnTransportValue.equals("UDP")
+                        && !turnTransportValue.equals("TCP")
+                        && !turnTransportValue.equals("TLS")) {
+                    turnTransport.setError("TURN فقط OFF، UDP، TCP یا TLS");
+                    return;
+                }
+
+                if (!turnTransportValue.equals("OFF")
+                        && (turnServer.getText().toString().trim().isEmpty()
+                        || turnUsername.getText().toString().trim().isEmpty()
+                        || (!hasStoredTurnPassword()
+                        && turnPassword.getText().toString().isEmpty()))) {
+                    turnServer.setError("برای TURN، Server / Username / Password لازم است.");
+                    return;
+                }
+
                 String newPassword = sipPassword.getText().toString();
+                String newTurnPassword = turnPassword.getText().toString();
 
                 try {
                     if (!newPassword.isEmpty()) {
                         secureStore.putSecret("sip_password", newPassword);
+                    }
+                    if (!newTurnPassword.isEmpty()) {
+                        secureStore.putSecret("turn_password", newTurnPassword);
                     }
                 } catch (Exception e) {
                     showToast("ذخیره امن رمز SIP ناموفق بود.");
@@ -832,6 +884,9 @@ public final class MainActivity extends Activity {
                         .putString("extension", extension.getText().toString().trim())
                         .putString("sip_registrar", sipRegistrar.getText().toString().trim())
                         .putString("stun_server", stunServer.getText().toString().trim())
+                        .putString("turn_server", turnServer.getText().toString().trim())
+                        .putString("turn_username", turnUsername.getText().toString().trim())
+                        .putString("turn_transport", turnTransportValue)
                         .putString("sip_username", sipUsername.getText().toString().trim())
                         .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
@@ -1029,6 +1084,12 @@ public final class MainActivity extends Activity {
             sipManager.setStunServer(
                     prefs.getString("stun_server", "").trim());
 
+            sipManager.setTurnConfiguration(
+                    prefs.getString("turn_server", "").trim(),
+                    prefs.getString("turn_username", "").trim(),
+                    getStoredTurnPassword(),
+                    prefs.getString("turn_transport", "OFF").trim());
+
             sipManager.register(
                     registrar,
                     username,
@@ -1081,6 +1142,24 @@ public final class MainActivity extends Activity {
         if (value == null) return "";
         String v = value.replace('\n', ' ').replace('\r', ' ').trim();
         return v.length() > 120 ? v.substring(0, 120) : v;
+    }
+
+    private boolean hasStoredTurnPassword() {
+        try {
+            String value = secureStore.getSecret("turn_password");
+            return value != null && !value.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String getStoredTurnPassword() {
+        try {
+            String value = secureStore.getSecret("turn_password");
+            return value == null ? "" : value;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private boolean hasStoredSipPassword() {

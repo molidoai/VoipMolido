@@ -46,6 +46,10 @@ public final class SipRegistrationManager {
     private boolean registered;
     private String registeredDomain = "";
     private String stunServer = "";
+    private String turnServer = "";
+    private String turnUsername = "";
+    private String turnPassword = "";
+    private String turnTransport = "OFF";
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -159,6 +163,16 @@ public final class SipRegistrationManager {
         }
     }
 
+    public synchronized void setTurnConfiguration(
+            String server, String username, String password, String transport) {
+        turnServer = clean(server);
+        turnUsername = clean(username);
+        turnPassword = password == null ? "" : password;
+        turnTransport = clean(transport).toUpperCase(java.util.Locale.ROOT);
+        if (turnTransport.isEmpty()) turnTransport = "OFF";
+        if (core != null) configureNatTraversal(core);
+    }
+
     public synchronized void register(
             String registrar,
             String username,
@@ -198,6 +212,7 @@ public final class SipRegistrationManager {
         authInfo = factory.createAuthInfo(
                 username, null, password, null, null, registeredDomain);
         core.addAuthInfo(authInfo);
+        installTurnAuthInfo();
 
         AccountParams params = core.createAccountParams();
 
@@ -385,17 +400,47 @@ public final class SipRegistrationManager {
             NatPolicy policy = targetCore.createNatPolicy();
             policy.setIceEnabled(true);
             policy.setUpnpEnabled(false);
-            policy.setTurnEnabled(false);
 
-            if (!stunServer.isEmpty()) {
-                policy.setStunServer(stunServer);
-                policy.setStunEnabled(true);
+            boolean turnEnabled = !"OFF".equals(turnTransport)
+                    && !turnServer.isEmpty()
+                    && !turnUsername.isEmpty()
+                    && !turnPassword.isEmpty();
+
+            if (turnEnabled) {
+                policy.setStunServer(turnServer);
+                policy.setStunServerUsername(turnUsername);
+                policy.setStunEnabled(false);
+                policy.setTurnEnabled(true);
+                policy.setUdpTurnTransportEnabled("UDP".equals(turnTransport));
+                policy.setTcpTurnTransportEnabled("TCP".equals(turnTransport));
+                policy.setTlsTurnTransportEnabled("TLS".equals(turnTransport));
                 policy.resolveStunServer();
             } else {
-                policy.setStunEnabled(false);
+                policy.setTurnEnabled(false);
+                policy.setUdpTurnTransportEnabled(false);
+                policy.setTcpTurnTransportEnabled(false);
+                policy.setTlsTurnTransportEnabled(false);
+                if (!stunServer.isEmpty()) {
+                    policy.setStunServer(stunServer);
+                    policy.setStunEnabled(true);
+                    policy.resolveStunServer();
+                } else {
+                    policy.setStunEnabled(false);
+                }
             }
-
             targetCore.setNatPolicy(policy);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void installTurnAuthInfo() {
+        if (core == null) return;
+        if ("OFF".equals(turnTransport)) return;
+        if (turnServer.isEmpty() || turnUsername.isEmpty() || turnPassword.isEmpty()) return;
+        try {
+            AuthInfo turnAuth = Factory.instance().createAuthInfo(
+                    turnUsername, null, turnPassword, null, null, null);
+            core.addAuthInfo(turnAuth);
         } catch (Exception ignored) {
         }
     }
