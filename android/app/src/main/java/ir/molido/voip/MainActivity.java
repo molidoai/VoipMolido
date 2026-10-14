@@ -61,6 +61,7 @@ public final class MainActivity extends Activity {
     private Button updateCenterButton;
     private long updateDownloadId = -1L;
     private String pendingUpdateSha256 = "";
+    private String pendingUpdateFilename = "";
     private android.net.Uri pendingInstallUri = null;
     private android.content.BroadcastReceiver updateDownloadReceiver;
     private TextView connectionStatus;
@@ -4957,6 +4958,7 @@ public final class MainActivity extends Activity {
 
             String filename =
                     "MOLIDO-VOIP-" + info.tag + ".apk";
+            pendingUpdateFilename = filename;
 
             android.app.DownloadManager.Request request =
                     new android.app.DownloadManager.Request(
@@ -5093,9 +5095,27 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
-                pendingInstallUri = apkUri;
+                java.io.File apkFile =
+                        new java.io.File(
+                                getExternalFilesDir(
+                                        android.os.Environment.DIRECTORY_DOWNLOADS),
+                                pendingUpdateFilename);
+
+                if (!apkFile.exists() || apkFile.length() <= 0L) {
+                    setStatus("فایل بروزرسانی برای نصب پیدا نشد.");
+                    showToast("فایل نصب پیدا نشد.");
+                    return;
+                }
+
+                android.net.Uri installUri =
+                        androidx.core.content.FileProvider.getUriForFile(
+                                this,
+                                getPackageName() + ".fileprovider",
+                                apkFile);
+
+                pendingInstallUri = installUri;
                 setStatus("بررسی امنیتی موفق ✓ • آماده نصب");
-                runOnUiThread(() -> showInstallReadyDialog(apkUri));
+                runOnUiThread(() -> showInstallReadyDialog(installUri));
             } catch (Exception e) {
                 setStatus("بررسی SHA-256 بروزرسانی ناموفق بود.");
             }
@@ -5166,13 +5186,34 @@ public final class MainActivity extends Activity {
             android.content.Intent install =
                     new android.content.Intent(
                             android.content.Intent.ACTION_VIEW);
+
             install.setDataAndType(
                     apkUri,
                     "application/vnd.android.package-archive");
+
+            install.setClipData(
+                    android.content.ClipData.newRawUri(
+                            "MOLIDO update",
+                            apkUri));
+
             install.addFlags(
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            install.addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            if (install.resolveActivity(getPackageManager()) == null) {
+                setStatus("نصب‌کننده Android در دسترس نیست.");
+                showToast("نصب‌کننده Android پیدا نشد.");
+                return;
+            }
+
             startActivity(install);
-            setStatus("آماده نصب • نصب را تأیید کنید");
+            setStatus("آماده نصب • نصب را در Android تأیید کنید");
+
+        } catch (android.content.ActivityNotFoundException e) {
+            setStatus("نصب‌کننده Android در دسترس نیست.");
+            showToast("نصب‌کننده Android پیدا نشد.");
         } catch (Exception e) {
             setStatus("باز کردن نصب‌کننده Android ناموفق بود.");
             showToast("نصب‌کننده باز نشد.");
