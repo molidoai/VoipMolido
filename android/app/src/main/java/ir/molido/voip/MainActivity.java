@@ -941,6 +941,13 @@ public final class MainActivity extends Activity {
 
         addSettingsSection(
                 root,
+                "PBX",
+                "مرکز PBX",
+                pbxSummary(),
+                () -> showPbxCenter());
+
+        addSettingsSection(
+                root,
                 "⚙",
                 "پیشرفته",
                 "SIP • STUN • TURN • Smart Route • Failover",
@@ -1106,6 +1113,334 @@ public final class MainActivity extends Activity {
                 })
                 .setNegativeButton("بستن", null)
                 .show();
+    }
+
+    private String pbxSummary() {
+        int didCount = 0;
+        try {
+            JSONArray dids = new JSONArray(prefs.getString("pbx_dids_json", "[]"));
+            didCount = dids.length();
+        } catch (Exception ignored) {}
+
+        String sip = prefs.getString("sip_username", "").trim();
+        String registrar = prefs.getString("sip_registrar", "").trim();
+
+        String sipState = (!sip.isEmpty() && !registrar.isEmpty())
+                ? "SIP آماده"
+                : "SIP تنظیم نشده";
+
+        return sipState + " • " + didCount + " DID";
+    }
+
+    private void showPbxCenter() {
+        String[] items = {
+                "SIP Account",
+                "DID Numbers",
+                "SIP Trunks",
+                "SMS Center"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("مرکز PBX")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showSipAccountManager();
+                    } else if (which == 1) {
+                        showDidManager();
+                    } else if (which == 2) {
+                        showSettingsInfo(
+                                "SIP Trunks",
+                                "مدیریت Trunk در فاز بعدی اضافه می‌شود. "
+                                        + "این بخش برای Provider، Host، Auth، Route و Failover آماده خواهد شد.");
+                    } else if (which == 3) {
+                        showSettingsInfo(
+                                "SMS Center",
+                                "مرکز پیامک در فاز بعدی اضافه می‌شود. "
+                                        + "برای SMS واقعی به Provider/API یا PBX backend نیاز است.");
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showSipAccountManager() {
+        String registrar = prefs.getString("sip_registrar", "").trim();
+        String backup = prefs.getString("sip_backup_registrar", "").trim();
+        String username = prefs.getString("sip_username", "").trim();
+        String extension = prefs.getString("extension", "").trim();
+        String transport = prefs.getString("sip_transport", "TLS").trim();
+        String media = prefs.getString("media_security", "REQUIRED").trim();
+
+        String status = sipManager != null && sipManager.isRegistered()
+                ? "Registered"
+                : "Offline";
+
+        String message =
+                "Status: " + status + "\n\n"
+                + "Extension: " + (extension.isEmpty() ? "—" : extension) + "\n"
+                + "Username: " + (username.isEmpty() ? "—" : username) + "\n"
+                + "Registrar: " + (registrar.isEmpty() ? "—" : registrar) + "\n"
+                + "Backup: " + (backup.isEmpty() ? "—" : backup) + "\n"
+                + "Transport: " + transport.toUpperCase(java.util.Locale.ROOT) + "\n"
+                + "Secure Media: " + media.toUpperCase(java.util.Locale.ROOT) + "\n\n"
+                + "رمز SIP فقط در SecureStore نگهداری می‌شود.";
+
+        new AlertDialog.Builder(this)
+                .setTitle("SIP Account")
+                .setMessage(message)
+                .setPositiveButton("ویرایش", (d, w) -> showSettings())
+                .setNeutralButton(
+                        sipManager != null && sipManager.isRegistered()
+                                ? "Unregister"
+                                : "Register",
+                        (d, w) -> {
+                            if (sipManager != null && sipManager.isRegistered()) {
+                                sipManager.unregister();
+                            } else if (isSipProfileReady()) {
+                                startSipRegistration();
+                            } else {
+                                showSettings();
+                            }
+                        })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showDidManager() {
+        JSONArray dids;
+        try {
+            dids = new JSONArray(prefs.getString("pbx_dids_json", "[]"));
+        } catch (Exception e) {
+            dids = new JSONArray();
+        }
+
+        final JSONArray current = dids;
+        int count = current.length();
+
+        String[] rows = new String[count + 1];
+        rows[0] = "＋ افزودن DID جدید";
+
+        for (int i = 0; i < count; i++) {
+            JSONObject item = current.optJSONObject(i);
+            if (item == null) {
+                rows[i + 1] = "DID";
+                continue;
+            }
+
+            String number = item.optString("number", "—");
+            String label = item.optString("label", "");
+            String route = item.optString("route", "");
+            boolean enabled = item.optBoolean("enabled", true);
+
+            rows[i + 1] =
+                    (enabled ? "● " : "○ ")
+                    + number
+                    + (label.isEmpty() ? "" : " • " + label)
+                    + (route.isEmpty() ? "" : " → " + route);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("DID Numbers")
+                .setItems(rows, (dialog, which) -> {
+                    if (which == 0) {
+                        showDidEditor(-1);
+                    } else {
+                        showDidActions(which - 1);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showDidActions(int index) {
+        JSONArray dids;
+        try {
+            dids = new JSONArray(prefs.getString("pbx_dids_json", "[]"));
+        } catch (Exception e) {
+            showToast("خواندن DID ناموفق بود.");
+            return;
+        }
+
+        JSONObject item = dids.optJSONObject(index);
+        if (item == null) return;
+
+        String number = item.optString("number", "DID");
+        boolean enabled = item.optBoolean("enabled", true);
+
+        String[] actions = {
+                "ویرایش",
+                enabled ? "غیرفعال کردن" : "فعال کردن",
+                "حذف"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle(number)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        showDidEditor(index);
+                    } else if (which == 1) {
+                        setDidEnabled(index, !enabled);
+                    } else if (which == 2) {
+                        deleteDid(index);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showDidEditor(int index) {
+        JSONArray dids;
+        try {
+            dids = new JSONArray(prefs.getString("pbx_dids_json", "[]"));
+        } catch (Exception e) {
+            dids = new JSONArray();
+        }
+
+        JSONObject existing = index >= 0 ? dids.optJSONObject(index) : null;
+
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        EditText number = field(
+                "DID Number / E.164",
+                existing == null ? "" : existing.optString("number", ""));
+        number.setInputType(InputType.TYPE_CLASS_PHONE);
+
+        EditText label = field(
+                "نام / Label",
+                existing == null ? "" : existing.optString("label", ""));
+
+        EditText route = field(
+                "Route / Extension",
+                existing == null ? "" : existing.optString("route", ""));
+        route.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        form.addView(number);
+        form.addView(label);
+        form.addView(route);
+
+        TextView note = new TextView(this);
+        note.setText(
+                "این نسخه DID را به‌صورت محلی مدیریت می‌کند. "
+                        + "Provisioning واقعی شماره و Route نیازمند PBX/Provider backend است.");
+        note.setTextSize(11f);
+        note.setTextColor(Color.GRAY);
+        note.setPadding(0, dp(8), 0, 0);
+        form.addView(note);
+
+        final JSONArray didList = dids;
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle(index < 0 ? "افزودن DID" : "ویرایش DID")
+                .setView(form)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ذخیره", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String numberValue = number.getText().toString().trim();
+                if (numberValue.isEmpty()) {
+                    number.setError("شماره DID لازم است.");
+                    return;
+                }
+
+                try {
+                    JSONObject item = existing == null
+                            ? new JSONObject()
+                            : new JSONObject(existing.toString());
+
+                    item.put("number", numberValue);
+                    item.put("label", label.getText().toString().trim());
+                    item.put("route", route.getText().toString().trim());
+
+                    if (!item.has("enabled")) {
+                        item.put("enabled", true);
+                    }
+
+                    JSONArray next = new JSONArray();
+
+                    for (int i = 0; i < didList.length(); i++) {
+                        if (i == index) {
+                            next.put(item);
+                        } else {
+                            JSONObject old = didList.optJSONObject(i);
+                            if (old != null) next.put(old);
+                        }
+                    }
+
+                    if (index < 0) {
+                        next.put(item);
+                    }
+
+                    prefs.edit()
+                            .putString("pbx_dids_json", next.toString())
+                            .apply();
+
+                    ad.dismiss();
+                    showDidManager();
+
+                } catch (Exception e) {
+                    showToast("ذخیره DID ناموفق بود.");
+                }
+            });
+        });
+
+        ad.show();
+    }
+
+    private void setDidEnabled(int index, boolean enabled) {
+        try {
+            JSONArray dids = new JSONArray(
+                    prefs.getString("pbx_dids_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < dids.length(); i++) {
+                JSONObject item = dids.optJSONObject(i);
+                if (item == null) continue;
+
+                JSONObject copy = new JSONObject(item.toString());
+                if (i == index) {
+                    copy.put("enabled", enabled);
+                }
+                next.put(copy);
+            }
+
+            prefs.edit()
+                    .putString("pbx_dids_json", next.toString())
+                    .apply();
+
+            showDidManager();
+
+        } catch (Exception e) {
+            showToast("تغییر وضعیت DID ناموفق بود.");
+        }
+    }
+
+    private void deleteDid(int index) {
+        try {
+            JSONArray dids = new JSONArray(
+                    prefs.getString("pbx_dids_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < dids.length(); i++) {
+                if (i == index) continue;
+                JSONObject item = dids.optJSONObject(i);
+                if (item != null) next.put(item);
+            }
+
+            prefs.edit()
+                    .putString("pbx_dids_json", next.toString())
+                    .apply();
+
+            showDidManager();
+
+        } catch (Exception e) {
+            showToast("حذف DID ناموفق بود.");
+        }
     }
 
     private void showSettingsInfo(String title, String message) {
