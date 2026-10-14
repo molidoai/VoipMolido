@@ -179,7 +179,7 @@ public final class MainActivity extends Activity {
         note.setTextColor(Color.GRAY);
         form.addView(note);
 
-        new AlertDialog.Builder(this)
+        AlertDialog ad = new AlertDialog.Builder(this)
                 .setTitle("تنظیمات MOLIDO VOIP")
                 .setView(scroll)
                 .setNegativeButton("انصراف", null)
@@ -188,31 +188,33 @@ public final class MainActivity extends Activity {
                     showToast("Cache پاک شد.");
                 })
                 .setPositiveButton("ذخیره", null)
-                .setOnShowListener(dialog -> {
-                    AlertDialog ad = (AlertDialog) dialog;
-                    ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                        String serverValue = server.getText().toString().trim();
-                        if (!serverValue.isEmpty()) {
-                            Uri uri = Uri.parse(serverValue);
-                            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
-                                server.setError("آدرس سرور باید HTTPS معتبر باشد.");
-                                return;
-                            }
-                        }
+                .create();
 
-                        prefs.edit()
-                                .putString("server", serverValue)
-                                .putString("tenant", tenant.getText().toString().trim())
-                                .putString("extension", extension.getText().toString().trim())
-                                .putString("display_name", displayName.getText().toString().trim())
-                                .putString("language", language.getText().toString().trim())
-                                .apply();
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String serverValue = server.getText().toString().trim();
+                if (!serverValue.isEmpty()) {
+                    Uri uri = Uri.parse(serverValue);
+                    if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+                        server.setError("آدرس سرور باید HTTPS معتبر باشد.");
+                        return;
+                    }
+                }
 
-                        showToast("تنظیمات ذخیره شد.");
-                        ad.dismiss();
-                    });
-                })
-                .show();
+                prefs.edit()
+                        .putString("server", serverValue)
+                        .putString("tenant", tenant.getText().toString().trim())
+                        .putString("extension", extension.getText().toString().trim())
+                        .putString("display_name", displayName.getText().toString().trim())
+                        .putString("language", language.getText().toString().trim())
+                        .apply();
+
+                showToast("تنظیمات ذخیره شد.");
+                ad.dismiss();
+            });
+        });
+
+        ad.show();
     }
 
     private EditText field(String hint, String value) {
