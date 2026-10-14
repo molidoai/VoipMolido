@@ -59,6 +59,8 @@ public final class MainActivity extends Activity {
     private Button registerButton;
     private Button callButton;
     private Button hangupButton;
+    private Button answerButton;
+    private Button rejectButton;
     private Button muteButton;
     private Button speakerButton;
     private TextView callStatus;
@@ -67,6 +69,7 @@ public final class MainActivity extends Activity {
     private MolidoConnectivityManager connectivityManager;
     private String pendingDialNumber = "";
     private boolean speakerEnabled = false;
+    private boolean pendingIncomingAnswer = false;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -423,6 +426,43 @@ public final class MainActivity extends Activity {
                 darkMode ? Color.rgb(156, 163, 175) : Color.rgb(107, 114, 128));
         audioQuality.setPadding(0, dp(4), 0, 0);
         callCard.addView(audioQuality);
+
+        LinearLayout incomingControls = new LinearLayout(this);
+        incomingControls.setOrientation(LinearLayout.HORIZONTAL);
+        incomingControls.setGravity(Gravity.CENTER);
+        incomingControls.setPadding(0, dp(8), 0, 0);
+
+        answerButton = new Button(this);
+        answerButton.setText("پاسخ");
+        answerButton.setAllCaps(false);
+        answerButton.setTextColor(Color.WHITE);
+        answerButton.setTypeface(Typeface.DEFAULT_BOLD);
+        answerButton.setBackground(roundedBg("#16A34A", 18, null));
+        answerButton.setEnabled(false);
+        answerButton.setVisibility(android.view.View.GONE);
+        answerButton.setOnClickListener(v -> answerIncomingCall());
+
+        rejectButton = new Button(this);
+        rejectButton.setText("رد تماس");
+        rejectButton.setAllCaps(false);
+        rejectButton.setTextColor(Color.WHITE);
+        rejectButton.setTypeface(Typeface.DEFAULT_BOLD);
+        rejectButton.setBackground(roundedBg("#DC2626", 18, null));
+        rejectButton.setEnabled(false);
+        rejectButton.setVisibility(android.view.View.GONE);
+        rejectButton.setOnClickListener(v -> sipManager.rejectIncomingCall());
+
+        LinearLayout.LayoutParams answerLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        answerLp.setMargins(0, 0, dp(5), 0);
+        incomingControls.addView(answerButton, answerLp);
+
+        LinearLayout.LayoutParams rejectLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rejectLp.setMargins(dp(5), 0, 0, 0);
+        incomingControls.addView(rejectButton, rejectLp);
+
+        callCard.addView(incomingControls);
 
         LinearLayout liveControls = new LinearLayout(this);
         liveControls.setOrientation(LinearLayout.HORIZONTAL);
@@ -1346,14 +1386,35 @@ public final class MainActivity extends Activity {
         if (requestCode == REQ_MIC) {
             if (grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                String number = pendingDialNumber;
-                pendingDialNumber = "";
-                if (!number.isEmpty()) placeOutgoingCall(number);
+                if (pendingIncomingAnswer) {
+                    pendingIncomingAnswer = false;
+                    sipManager.acceptIncomingCall();
+                } else {
+                    String number = pendingDialNumber;
+                    pendingDialNumber = "";
+                    if (!number.isEmpty()) placeOutgoingCall(number);
+                }
             } else {
+                pendingIncomingAnswer = false;
                 pendingDialNumber = "";
                 showToast("برای تماس صوتی، اجازه میکروفن لازم است.");
             }
         }
+    }
+
+    private void answerIncomingCall() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingIncomingAnswer = true;
+            requestPermissions(
+                    new String[]{Manifest.permission.RECORD_AUDIO},
+                    REQ_MIC);
+            return;
+        }
+
+        pendingIncomingAnswer = false;
+        sipManager.acceptIncomingCall();
     }
 
     private void updateCallUi(
@@ -1379,13 +1440,28 @@ public final class MainActivity extends Activity {
             text += " • " + safeDetail;
         }
 
+        if ("Incoming".equals(state)) {
+            text = "تماس ورودی" + (safeDetail.isEmpty() ? "" : " • " + safeDetail);
+        }
+
         callStatus.setText(text);
 
+        boolean incoming = "Incoming".equals(state);
+        if (answerButton != null) {
+            answerButton.setVisibility(incoming ? android.view.View.VISIBLE : android.view.View.GONE);
+            answerButton.setEnabled(incoming);
+        }
+        if (rejectButton != null) {
+            rejectButton.setVisibility(incoming ? android.view.View.VISIBLE : android.view.View.GONE);
+            rejectButton.setEnabled(incoming);
+        }
+
         boolean controls = active
+                && !incoming
                 && !"Calling".equals(state)
                 && !"Ringing".equals(state);
 
-        hangupButton.setEnabled(active);
+        hangupButton.setEnabled(active && !"Incoming".equals(state));
         muteButton.setEnabled(controls);
         speakerButton.setEnabled(controls);
         callButton.setEnabled(!active);

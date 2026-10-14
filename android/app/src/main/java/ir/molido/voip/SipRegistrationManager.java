@@ -17,6 +17,7 @@ import org.linphone.core.MediaEncryption;
 import org.linphone.core.NatPolicy;
 import org.linphone.core.PayloadType;
 import org.linphone.core.RegistrationState;
+import org.linphone.core.Reason;
 import org.linphone.core.TransportType;
 
 import java.util.Arrays;
@@ -131,7 +132,8 @@ public final class SipRegistrationManager {
                 String message) {
 
             if (currentCall == null) {
-                if (state == Call.State.OutgoingInit
+                if (state == Call.State.IncomingReceived
+                        || state == Call.State.OutgoingInit
                         || state == Call.State.OutgoingProgress
                         || state == Call.State.OutgoingRinging
                         || state == Call.State.OutgoingEarlyMedia
@@ -143,7 +145,10 @@ public final class SipRegistrationManager {
 
             if (currentCall != null && call != currentCall) return;
 
-            if (state == Call.State.OutgoingInit
+            if (state == Call.State.IncomingReceived) {
+                String caller = callerLabel(call);
+                notifyCall("Incoming", caller, true);
+            } else if (state == Call.State.OutgoingInit
                     || state == Call.State.OutgoingProgress) {
                 notifyCall("Calling", safe(message), true);
             } else if (state == Call.State.OutgoingRinging
@@ -392,6 +397,33 @@ public final class SipRegistrationManager {
 
         currentCall = call;
         notifyCall("Calling", "INVITE sent", true);
+    }
+
+    public synchronized void acceptIncomingCall() {
+        if (currentCall == null) {
+            notifyCall("Failed", "No incoming call", false);
+            return;
+        }
+        try {
+            int result = currentCall.accept();
+            if (result != 0) {
+                notifyCall("Failed", "Unable to answer call", true);
+            }
+        } catch (Exception e) {
+            notifyCall("Failed", safe(e.getMessage()), true);
+        }
+    }
+
+    public synchronized void rejectIncomingCall() {
+        if (currentCall == null) return;
+        try {
+            int result = currentCall.decline(Reason.Declined);
+            if (result != 0) {
+                notifyCall("Failed", "Unable to reject call", true);
+            }
+        } catch (Exception e) {
+            notifyCall("Failed", safe(e.getMessage()), true);
+        }
     }
 
     public synchronized void terminateCall() {
@@ -725,6 +757,27 @@ public final class SipRegistrationManager {
     private void notifyRoute(String route, boolean reachable) {
         if (routeListener != null) {
             routeListener.onRouteChanged(activeNetworkType, route, reachable);
+        }
+    }
+
+    private String callerLabel(Call call) {
+        if (call == null) return "تماس ورودی";
+        try {
+            Address remote = call.getRemoteAddress();
+            if (remote == null) return "تماس ورودی";
+
+            String display = remote.getDisplayName();
+            String user = remote.getUsername();
+
+            if (display != null && !display.trim().isEmpty()) {
+                return safe(display);
+            }
+            if (user != null && !user.trim().isEmpty()) {
+                return safe(user);
+            }
+            return safe(remote.asStringUriOnly());
+        } catch (Exception e) {
+            return "تماس ورودی";
         }
     }
 
