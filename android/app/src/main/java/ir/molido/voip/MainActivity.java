@@ -768,6 +768,10 @@ public final class MainActivity extends Activity {
                 "SIP Registrar / Domain (مثال: pbx.example.com:5061)",
                 prefs.getString("sip_registrar", ""));
 
+        EditText sipBackupRegistrar = field(
+                "Backup SIP Registrar (اختیاری)",
+                prefs.getString("sip_backup_registrar", ""));
+
         EditText stunServer = field(
                 "STUN Server (اختیاری، مثال: stun.example.com:3478)",
                 prefs.getString("stun_server", ""));
@@ -820,6 +824,7 @@ public final class MainActivity extends Activity {
         form.addView(tenant);
         form.addView(extension);
         form.addView(sipRegistrar);
+        form.addView(sipBackupRegistrar);
         form.addView(stunServer);
         form.addView(turnServer);
         form.addView(turnUsername);
@@ -921,6 +926,7 @@ public final class MainActivity extends Activity {
                         .putString("tenant", tenant.getText().toString().trim())
                         .putString("extension", extension.getText().toString().trim())
                         .putString("sip_registrar", sipRegistrar.getText().toString().trim())
+                        .putString("sip_backup_registrar", sipBackupRegistrar.getText().toString().trim())
                         .putString("stun_server", stunServer.getText().toString().trim())
                         .putString("turn_server", turnServer.getText().toString().trim())
                         .putString("turn_username", turnUsername.getText().toString().trim())
@@ -1119,6 +1125,9 @@ public final class MainActivity extends Activity {
             registerButton.setText("Connecting…");
             connectionStatus.setText("●  Connecting…");
             connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+
+            sipManager.setBackupRegistrar(
+                    prefs.getString("sip_backup_registrar", "").trim());
 
             sipManager.setStunServer(
                     prefs.getString("stun_server", "").trim());

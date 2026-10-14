@@ -1,6 +1,8 @@
 package ir.molido.voip;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import org.linphone.core.Account;
 import org.linphone.core.AccountParams;
@@ -59,6 +61,15 @@ public final class SipRegistrationManager {
     private String activeNetworkType = "Unknown";
     private boolean networkReachable = true;
     private boolean pendingNatRefresh = false;
+    private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
+    private int reconnectAttempt = 0;
+    private boolean manualUnregister = false;
+    private String primaryRegistrar = "";
+    private String backupRegistrar = "";
+    private String activeRegistrar = "";
+    private String cachedUsername = "";
+    private String cachedPassword = "";
+    private String cachedTransport = "TLS";
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -77,6 +88,7 @@ public final class SipRegistrationManager {
                 notifyState("Refreshing", safe(message), registered);
             } else if (state == RegistrationState.Ok) {
                 registered = true;
+                reconnectAttempt = 0;
                 notifyState("Registered", safe(message), true);
             } else if (state == RegistrationState.Failed) {
                 registered = false;
@@ -89,6 +101,7 @@ public final class SipRegistrationManager {
                     }
                 } catch (Exception ignored) {}
                 notifyState("Failed", detail, false);
+                scheduleReconnect("Registration failed");
             } else if (state == RegistrationState.Cleared) {
                 registered = false;
                 notifyState("Offline", "Unregistered", false);
@@ -190,6 +203,7 @@ public final class SipRegistrationManager {
 
     public synchronized void onNetworkStateChanged(
             boolean reachable, String networkType, boolean metered) {
+        boolean wasReachable = networkReachable;
         networkReachable = reachable;
         activeNetworkType = clean(networkType).isEmpty()
                 ? "Unknown" : clean(networkType);
@@ -207,6 +221,18 @@ public final class SipRegistrationManager {
         }
 
         notifyRoute(currentRouteLabel(), reachable);
+
+        if (!reachable) {
+            registered = false;
+            reconnectHandler.removeCallbacksAndMessages(null);
+        } else if (!wasReachable && !manualUnregister && !cachedUsername.isEmpty()) {
+            reconnectAttempt = 0;
+            scheduleReconnect("Network restored");
+        }
+    }
+
+    public synchronized void setBackupRegistrar(String registrar) {
+        backupRegistrar = clean(registrar);
     }
 
     public synchronized void setStunServer(String server) {
@@ -240,7 +266,24 @@ public final class SipRegistrationManager {
         if (username.isEmpty()) throw new IllegalArgumentException("SIP Username is required");
         if (password.isEmpty()) throw new IllegalArgumentException("SIP Password is required");
 
+        primaryRegistrar = registrar;
+        activeRegistrar = registrar;
+        cachedUsername = username;
+        cachedPassword = password;
+        cachedTransport = transportName == null ? "TLS" : transportName;
+        manualUnregister = false;
+        reconnectAttempt = 0;
+
         ensureCore();
+        performRegistration(registrar, username, password, cachedTransport);
+    }
+
+    private synchronized void performRegistration(
+            String registrar,
+            String username,
+            String password,
+            String transportName) throws Exception {
+
         removeCurrentAccount();
 
         Factory factory = Factory.instance();
@@ -355,6 +398,8 @@ public final class SipRegistrationManager {
     }
 
     public synchronized void unregister() {
+        manualUnregister = true;
+        reconnectHandler.removeCallbacksAndMessages(null);
         if (core == null || account == null) {
             registered = false;
             notifyState("Offline", "No active SIP account", false);
@@ -373,6 +418,8 @@ public final class SipRegistrationManager {
     }
 
     public synchronized void shutdown() {
+        manualUnregister = true;
+        reconnectHandler.removeCallbacksAndMessages(null);
         try {
             if (currentCall != null) currentCall.terminate();
         } catch (Exception ignored) {}
@@ -447,6 +494,51 @@ public final class SipRegistrationManager {
 
         account = null;
         authInfo = null;
+    }
+
+    private synchronized void scheduleReconnect(String reason) {
+        if (manualUnregister || !networkReachable || cachedUsername.isEmpty()) return;
+        if (currentCall != null) return;
+        if (reconnectAttempt >= 5) {
+            notifyState("Failed", "Reconnect limit reached", false);
+            return;
+        }
+
+        reconnectHandler.removeCallbacksAndMessages(null);
+        long[] delays = {1000L, 2000L, 4000L, 8000L, 15000L};
+        long delay = delays[Math.min(reconnectAttempt, delays.length - 1)];
+        int attemptForUi = reconnectAttempt + 1;
+
+        reconnectHandler.postDelayed(() -> {
+            synchronized (SipRegistrationManager.this) {
+                if (manualUnregister || !networkReachable || currentCall != null) return;
+
+                reconnectAttempt++;
+                String target = primaryRegistrar;
+                if (reconnectAttempt >= 3 && !backupRegistrar.isEmpty()) {
+                    target = backupRegistrar;
+                }
+                activeRegistrar = target;
+
+                notifyState("Connecting",
+                        reason + " • retry " + attemptForUi
+                                + (target.equals(primaryRegistrar)
+                                ? " • primary" : " • backup"),
+                        false);
+
+                try {
+                    ensureCore();
+                    performRegistration(
+                            target,
+                            cachedUsername,
+                            cachedPassword,
+                            cachedTransport);
+                } catch (Exception e) {
+                    notifyState("Failed", safe(e.getMessage()), false);
+                    scheduleReconnect("Reconnect failed");
+                }
+            }
+        }, delay);
     }
 
     private void configureNatTraversal(Core targetCore) {
