@@ -532,7 +532,7 @@ public final class MainActivity extends Activity {
         settingsButton.setTextSize(12f);
         settingsButton.setAllCaps(false);
         styleSecondaryButton(settingsButton);
-        settingsButton.setOnClickListener(v -> showSettings());
+        settingsButton.setOnClickListener(v -> showSettingsHub());
 
         Button themeButton = new Button(this);
         themeButton.setText(darkMode ? "روشن" : "تیره");
@@ -743,6 +743,268 @@ public final class MainActivity extends Activity {
 
     private String valueOrDash(String value) {
         return value == null || value.isEmpty() ? "—" : value;
+    }
+
+    private void showSettingsHub() {
+        ScrollView scroll = new ScrollView(this);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(12), dp(16), dp(18));
+        root.setBackgroundColor(darkMode
+                ? Color.rgb(17, 24, 39)
+                : Color.rgb(246, 248, 252));
+        scroll.addView(root);
+
+        TextView title = new TextView(this);
+        title.setText("تنظیمات");
+        title.setTextSize(24f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
+        root.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("MOLIDO VoIP • تنظیمات ساده، دسته‌بندی‌شده و حرفه‌ای");
+        subtitle.setTextSize(12f);
+        subtitle.setTextColor(darkMode
+                ? Color.rgb(156, 163, 175)
+                : Color.rgb(107, 114, 128));
+        subtitle.setPadding(0, dp(3), 0, dp(14));
+        root.addView(subtitle);
+
+        addSettingsSection(
+                root,
+                "👤",
+                "حساب و پروفایل",
+                accountSummary(),
+                () -> showSettings());
+
+        addSettingsSection(
+                root,
+                "☎",
+                "تماس و صدا",
+                "Smart Audio • Codec • Speaker • Microphone",
+                () -> showSettingsInfo(
+                        "تماس و صدا",
+                        "تنظیمات صوتی فعال شامل Smart Audio، Echo Cancellation، "
+                                + "Adaptive Jitter و اولویت Codecها است. "
+                                + "کنترل‌های تخصصی‌تر در نسخه‌های بعدی به این بخش منتقل می‌شوند."));
+
+        addSettingsSection(
+                root,
+                "🌐",
+                "شبکه و اتصال",
+                networkSummary(),
+                () -> showSettings());
+
+        addSettingsSection(
+                root,
+                "🔒",
+                "امنیت",
+                securitySummary(),
+                () -> showSettings());
+
+        addSettingsSection(
+                root,
+                "🔔",
+                "اعلان‌ها و تماس ورودی",
+                "اعلان تماس • تماس ازدست‌رفته • مزاحم نشوید",
+                () -> showSettingsInfo(
+                        "اعلان‌ها و تماس ورودی",
+                        "این بخش برای مدیریت تماس ورودی، اعلان تماس ازدست‌رفته، "
+                                + "صدای زنگ و حالت مزاحم نشوید آماده شده است."));
+
+        addSettingsSection(
+                root,
+                "◐",
+                "ظاهر و زبان",
+                (darkMode ? "حالت تیره" : "حالت روشن")
+                        + " • "
+                        + prefs.getString("language", "fa"),
+                () -> showAppearanceQuickSettings());
+
+        addSettingsSection(
+                root,
+                "↻",
+                "بروزرسانی",
+                "نسخه فعلی v" + BuildConfig.VERSION_NAME,
+                () -> checkUpdates(true));
+
+        addSettingsSection(
+                root,
+                "⚙",
+                "پیشرفته",
+                "SIP • STUN • TURN • Smart Route • Failover",
+                () -> showSettings());
+
+        addSettingsSection(
+                root,
+                "ⓘ",
+                "درباره MOLIDO VoIP",
+                "Build " + BuildConfig.VERSION_NAME + " • Android",
+                () -> showSettingsInfo(
+                        "درباره MOLIDO VoIP",
+                        "MOLIDO VoIP\\n"
+                                + "Version: " + BuildConfig.VERSION_NAME + "\\n\\n"
+                                + "Secure SIP • ICE/STUN/TURN • Smart Route • "
+                                + "Auto Reconnect • SIP Failover • SRTP"));
+
+        new AlertDialog.Builder(this)
+                .setView(scroll)
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void addSettingsSection(
+            LinearLayout parent,
+            String icon,
+            String title,
+            String subtitle,
+            Runnable action) {
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
+        card.setBackground(roundedBg(
+                darkMode ? "#1F2937" : "#FFFFFF",
+                18,
+                darkMode ? "#374151" : "#E5E7EB"));
+        card.setElevation(dp(2));
+
+        TextView iconView = new TextView(this);
+        iconView.setText(icon);
+        iconView.setTextSize(23f);
+        iconView.setGravity(Gravity.CENTER);
+
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(
+                dp(42), dp(42));
+        card.addView(iconView, iconLp);
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dp(10), 0, dp(8), 0);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(15f);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextColor(
+                darkMode ? Color.WHITE : Color.rgb(31, 41, 55));
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(subtitle);
+        subtitleView.setTextSize(11f);
+        subtitleView.setTextColor(
+                darkMode
+                        ? Color.rgb(156, 163, 175)
+                        : Color.rgb(107, 114, 128));
+        subtitleView.setPadding(0, dp(3), 0, 0);
+
+        texts.addView(titleView);
+        texts.addView(subtitleView);
+
+        card.addView(texts, new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("‹");
+        arrow.setTextSize(26f);
+        arrow.setTextColor(
+                darkMode
+                        ? Color.rgb(156, 163, 175)
+                        : Color.rgb(107, 114, 128));
+        card.addView(arrow);
+
+        card.setOnClickListener(v -> {
+            if (action != null) action.run();
+        });
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, dp(8));
+        parent.addView(card, lp);
+    }
+
+    private String accountSummary() {
+        String displayName = prefs.getString("display_name", "").trim();
+        String extension = prefs.getString("extension", "").trim();
+
+        if (displayName.isEmpty()) displayName = "کاربر MOLIDO";
+        if (extension.isEmpty()) extension = "بدون داخلی";
+
+        return displayName + " • " + extension;
+    }
+
+    private String networkSummary() {
+        String route = prefs.getString("route_mode", "AUTO")
+                .trim()
+                .toUpperCase(java.util.Locale.ROOT);
+
+        String transport = prefs.getString("sip_transport", "TLS")
+                .trim()
+                .toUpperCase(java.util.Locale.ROOT);
+
+        String turn = prefs.getString("turn_transport", "OFF")
+                .trim()
+                .toUpperCase(java.util.Locale.ROOT);
+
+        return transport + " • Smart Route " + route + " • TURN " + turn;
+    }
+
+    private String securitySummary() {
+        String mode = prefs.getString("media_security", "REQUIRED")
+                .trim()
+                .toUpperCase(java.util.Locale.ROOT);
+
+        return "SRTP " + mode + " • SecureStore فعال";
+    }
+
+    private void showAppearanceQuickSettings() {
+        String currentLanguage = prefs.getString("language", "fa");
+
+        String[] items = {
+                darkMode ? "تغییر به حالت روشن" : "تغییر به حالت تیره",
+                "زبان فارسی",
+                "English",
+                "بلوچی"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("ظاهر و زبان")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        prefs.edit()
+                                .putBoolean("dark_mode", !darkMode)
+                                .apply();
+                        recreate();
+                        return;
+                    }
+
+                    String lang = currentLanguage;
+                    if (which == 1) lang = "fa";
+                    if (which == 2) lang = "en";
+                    if (which == 3) lang = "bal";
+
+                    prefs.edit()
+                            .putString("language", lang)
+                            .apply();
+
+                    showToast("زبان ذخیره شد: " + lang);
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showSettingsInfo(String title, String message) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("باشه", null)
+                .show();
     }
 
     private void showSettings() {
