@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
@@ -61,14 +63,44 @@ public final class MainActivity extends Activity {
         root.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        root.setBackgroundColor(Color.rgb(246, 248, 252));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(18), dp(14), dp(18), dp(12));
+        header.setBackground(roundedBg("#111827", 0, null));
+        header.setElevation(dp(5));
+
+        TextView brand = new TextView(this);
+        brand.setText("MOLIDO VOIP");
+        brand.setTextColor(Color.WHITE);
+        brand.setTextSize(22f);
+        brand.setTypeface(Typeface.DEFAULT_BOLD);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("ارتباط هوشمند • امن • سریع");
+        subtitle.setTextColor(Color.rgb(200, 210, 225));
+        subtitle.setTextSize(12f);
+        subtitle.setPadding(0, dp(2), 0, 0);
+
+        header.addView(brand);
+        header.addView(subtitle);
+        root.addView(header, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         web = new WebView(this);
-        root.addView(web, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        web.setBackgroundColor(Color.WHITE);
+        LinearLayout.LayoutParams webLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        webLp.setMargins(dp(10), dp(10), dp(10), dp(8));
+        root.addView(web, webLp);
 
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
-        footer.setPadding(dp(10), dp(4), dp(10), dp(5));
+        footer.setPadding(dp(12), dp(9), dp(12), dp(9));
+        footer.setBackground(roundedBg("#FFFFFF", 22, null));
+        footer.setElevation(dp(8));
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -77,18 +109,21 @@ public final class MainActivity extends Activity {
         TextView version = new TextView(this);
         version.setText("MOLIDO VOIP  •  v" + BuildConfig.VERSION_NAME);
         version.setTextSize(12f);
-        version.setTextColor(Color.DKGRAY);
+        version.setTextColor(Color.rgb(55, 65, 81));
+        version.setTypeface(Typeface.DEFAULT_BOLD);
 
         Button qrButton = new Button(this);
-        qrButton.setText("QR");
+        qrButton.setText("اسکن QR");
         qrButton.setTextSize(12f);
         qrButton.setAllCaps(false);
+        styleSecondaryButton(qrButton);
         qrButton.setOnClickListener(v -> startQrScan());
 
         Button settingsButton = new Button(this);
         settingsButton.setText("تنظیمات");
         settingsButton.setTextSize(12f);
         settingsButton.setAllCaps(false);
+        styleSecondaryButton(settingsButton);
         settingsButton.setOnClickListener(v -> showSettings());
 
         top.addView(version, new LinearLayout.LayoutParams(
@@ -103,12 +138,15 @@ public final class MainActivity extends Activity {
         updateStatus = new TextView(this);
         updateStatus.setText("وضعیت بروزرسانی: در انتظار بررسی");
         updateStatus.setTextSize(11f);
-        updateStatus.setTextColor(Color.GRAY);
+        updateStatus.setTextColor(Color.rgb(75, 85, 99));
+        updateStatus.setPadding(dp(10), dp(7), dp(10), dp(7));
+        updateStatus.setBackground(roundedBg("#F3F4F6", 14, null));
 
         updateButton = new Button(this);
         updateButton.setText("بررسی بروزرسانی");
         updateButton.setTextSize(12f);
         updateButton.setAllCaps(false);
+        stylePrimaryButton(updateButton);
         updateButton.setOnClickListener(v -> checkUpdates(true));
 
         bottom.addView(updateStatus, new LinearLayout.LayoutParams(
@@ -345,6 +383,16 @@ public final class MainActivity extends Activity {
         e.setHint(hint);
         e.setText(value);
         e.setSingleLine(true);
+        e.setTextSize(14f);
+        e.setTextColor(Color.rgb(31, 41, 55));
+        e.setHintTextColor(Color.rgb(156, 163, 175));
+        e.setPadding(dp(14), dp(11), dp(14), dp(11));
+        e.setBackground(roundedBg("#F9FAFB", 14, "#E5E7EB"));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(5), 0, dp(5));
+        e.setLayoutParams(lp);
         return e;
     }
 
@@ -537,6 +585,33 @@ public final class MainActivity extends Activity {
                         this,
                         text,
                         Toast.LENGTH_SHORT).show());
+    }
+
+    private void stylePrimaryButton(Button button) {
+        button.setTextColor(Color.WHITE);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setPadding(dp(14), dp(8), dp(14), dp(8));
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setBackground(roundedBg("#2563EB", 16, null));
+        button.setElevation(dp(2));
+    }
+
+    private void styleSecondaryButton(Button button) {
+        button.setTextColor(Color.rgb(37, 99, 235));
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setPadding(dp(12), dp(7), dp(12), dp(7));
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setBackground(roundedBg("#EFF6FF", 16, "#DBEAFE"));
+    }
+
+    private GradientDrawable roundedBg(String fill, int radiusDp, String stroke) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(Color.parseColor(fill));
+        d.setCornerRadius(dp(radiusDp));
+        if (stroke != null) d.setStroke(dp(1), Color.parseColor(stroke));
+        return d;
     }
 
     private int dp(int value) {
