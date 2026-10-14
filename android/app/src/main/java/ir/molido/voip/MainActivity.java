@@ -832,9 +832,7 @@ public final class MainActivity extends Activity {
     private void showUpdateCenter() {
         String message =
                 "نسخه نصب‌شده: v" + BuildConfig.VERSION_NAME
-                        + "
-
-"
+                        + "\n\n"
                         + "MOLIDO هنگام اجرای برنامه نسخه رسمی GitHub "
                         + "را بررسی می‌کند. نصب بروزرسانی با تأیید کاربر "
                         + "و از طریق APK رسمی انجام می‌شود.";
