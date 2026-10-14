@@ -438,8 +438,7 @@ public final class MainActivity extends Activity {
                 key.setText(
                         letters.isEmpty()
                                 ? digit
-                                : digit + "
-" + letters);
+                                : digit + "\n" + letters);
                 key.setTextSize(24f);
                 key.setTextColor(Color.WHITE);
                 key.setGravity(Gravity.CENTER);
@@ -773,8 +772,7 @@ public final class MainActivity extends Activity {
         nav.setBackgroundColor(Color.rgb(32, 32, 32));
 
         Button navContacts = new Button(this);
-        navContacts.setText("👤
-مخاطبین");
+        navContacts.setText("👤\nمخاطبین");
         navContacts.setTextSize(10f);
         navContacts.setAllCaps(false);
         navContacts.setTextColor(Color.WHITE);
@@ -782,8 +780,7 @@ public final class MainActivity extends Activity {
         navContacts.setOnClickListener(v -> showContactsCenter());
 
         Button navKeypad = new Button(this);
-        navKeypad.setText("⠿
-صفحه‌کلید");
+        navKeypad.setText("⠿\nصفحه‌کلید");
         navKeypad.setTextSize(10f);
         navKeypad.setAllCaps(false);
         navKeypad.setTextColor(Color.rgb(56, 189, 248));
@@ -791,8 +788,7 @@ public final class MainActivity extends Activity {
         navKeypad.setOnClickListener(v -> dialInput.requestFocus());
 
         Button navRecents = new Button(this);
-        navRecents.setText("◷
-اخیرها");
+        navRecents.setText("◷\nاخیرها");
         navRecents.setTextSize(10f);
         navRecents.setAllCaps(false);
         navRecents.setTextColor(Color.WHITE);
@@ -800,8 +796,7 @@ public final class MainActivity extends Activity {
         navRecents.setOnClickListener(v -> showCallHistory());
 
         Button navMessages = new Button(this);
-        navMessages.setText("▱
-پیام‌ها");
+        navMessages.setText("▱\nپیام‌ها");
         navMessages.setTextSize(10f);
         navMessages.setAllCaps(false);
         navMessages.setTextColor(Color.WHITE);
@@ -809,8 +804,7 @@ public final class MainActivity extends Activity {
         navMessages.setOnClickListener(v -> showMessagesCenter());
 
         Button navMore = new Button(this);
-        navMore.setText("•••
-بیشتر");
+        navMore.setText("•••\nبیشتر");
         navMore.setTextSize(10f);
         navMore.setAllCaps(false);
         navMore.setTextColor(Color.WHITE);
