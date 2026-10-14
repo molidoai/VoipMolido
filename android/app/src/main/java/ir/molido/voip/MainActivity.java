@@ -1128,6 +1128,12 @@ public final class MainActivity extends Activity {
             ivrCount = ivrs.length();
         } catch (Exception ignored) {}
 
+        int trunkCount = 0;
+        try {
+            JSONArray trunks = new JSONArray(prefs.getString("pbx_trunks_json", "[]"));
+            trunkCount = trunks.length();
+        } catch (Exception ignored) {}
+
         String sip = prefs.getString("sip_username", "").trim();
         String registrar = prefs.getString("sip_registrar", "").trim();
 
@@ -1135,7 +1141,10 @@ public final class MainActivity extends Activity {
                 ? "SIP آماده"
                 : "SIP تنظیم نشده";
 
-        return sipState + " • " + didCount + " DID • " + ivrCount + " IVR";
+        return sipState
+                + " • " + didCount + " DID"
+                + " • " + ivrCount + " IVR"
+                + " • " + trunkCount + " Trunk";
     }
 
     private void showPbxCenter() {
@@ -1157,10 +1166,7 @@ public final class MainActivity extends Activity {
                     } else if (which == 2) {
                         showIvrManager();
                     } else if (which == 3) {
-                        showSettingsInfo(
-                                "SIP Trunks",
-                                "مدیریت Trunk در فاز بعدی اضافه می‌شود. "
-                                        + "این بخش برای Provider، Host، Auth، Route و Failover آماده خواهد شد.");
+                        showTrunkManager();
                     } else if (which == 4) {
                         showSettingsInfo(
                                 "SMS Center",
@@ -1170,6 +1176,473 @@ public final class MainActivity extends Activity {
                 })
                 .setNegativeButton("بستن", null)
                 .show();
+    }
+
+    private void showTrunkManager() {
+        JSONArray trunks;
+        try {
+            trunks = new JSONArray(prefs.getString("pbx_trunks_json", "[]"));
+        } catch (Exception e) {
+            trunks = new JSONArray();
+        }
+
+        int count = trunks.length();
+        String[] rows = new String[count + 1];
+        rows[0] = "＋ افزودن SIP Trunk";
+
+        for (int i = 0; i < count; i++) {
+            JSONObject item = trunks.optJSONObject(i);
+            if (item == null) {
+                rows[i + 1] = "SIP Trunk";
+                continue;
+            }
+
+            String provider = item.optString("provider", "Trunk");
+            String host = item.optString("host", "—");
+            String transport = item.optString("transport", "TLS");
+            boolean enabled = item.optBoolean("enabled", true);
+            boolean isDefault = item.optBoolean("default", false);
+
+            rows[i + 1] =
+                    (enabled ? "● " : "○ ")
+                    + provider
+                    + " • "
+                    + host
+                    + " • "
+                    + transport
+                    + (isDefault ? " • DEFAULT" : "");
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("SIP Trunks")
+                .setItems(rows, (dialog, which) -> {
+                    if (which == 0) {
+                        showTrunkEditor(-1);
+                    } else {
+                        showTrunkActions(which - 1);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showTrunkActions(int index) {
+        JSONArray trunks;
+        try {
+            trunks = new JSONArray(prefs.getString("pbx_trunks_json", "[]"));
+        } catch (Exception e) {
+            showToast("خواندن Trunk ناموفق بود.");
+            return;
+        }
+
+        JSONObject item = trunks.optJSONObject(index);
+        if (item == null) return;
+
+        String provider = item.optString("provider", "SIP Trunk");
+        boolean enabled = item.optBoolean("enabled", true);
+        boolean isDefault = item.optBoolean("default", false);
+
+        String[] actions = {
+                "ویرایش",
+                enabled ? "غیرفعال کردن" : "فعال کردن",
+                isDefault ? "Trunk پیش‌فرض است" : "تنظیم به‌عنوان Default",
+                "جزئیات / Health",
+                "حذف"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle(provider)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        showTrunkEditor(index);
+                    } else if (which == 1) {
+                        setTrunkEnabled(index, !enabled);
+                    } else if (which == 2) {
+                        if (!isDefault) setDefaultTrunk(index);
+                    } else if (which == 3) {
+                        showTrunkDetails(index);
+                    } else if (which == 4) {
+                        deleteTrunk(index);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showTrunkEditor(int index) {
+        JSONArray trunks;
+        try {
+            trunks = new JSONArray(prefs.getString("pbx_trunks_json", "[]"));
+        } catch (Exception e) {
+            trunks = new JSONArray();
+        }
+
+        JSONObject existing = index >= 0 ? trunks.optJSONObject(index) : null;
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+        scroll.addView(form);
+
+        EditText provider = field(
+                "Provider / نام Trunk",
+                existing == null ? "" : existing.optString("provider", ""));
+
+        EditText host = field(
+                "Host / Domain",
+                existing == null ? "" : existing.optString("host", ""));
+
+        EditText port = field(
+                "Port",
+                existing == null ? "5061" : String.valueOf(existing.optInt("port", 5061)));
+        port.setInputType(InputType.TYPE_CLASS_NUMBER);
+
+        EditText username = field(
+                "Username",
+                existing == null ? "" : existing.optString("username", ""));
+
+        EditText authId = field(
+                "Auth ID",
+                existing == null ? "" : existing.optString("authId", ""));
+
+        EditText password = field("Password", "");
+        password.setInputType(
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+
+        String existingId = existing == null ? "" : existing.optString("id", "");
+        boolean hasPassword = false;
+        if (!existingId.isEmpty()) {
+            try {
+                String stored = secureStore.getSecret("trunk_password_" + existingId);
+                hasPassword = stored != null && !stored.isEmpty();
+            } catch (Exception ignored) {}
+        }
+
+        password.setHint(
+                hasPassword
+                        ? "رمز ذخیره شده • برای تغییر، رمز جدید را وارد کنید"
+                        : "Password");
+
+        EditText transport = field(
+                "Transport: TLS / TCP / UDP",
+                existing == null ? "TLS" : existing.optString("transport", "TLS"));
+
+        EditText mode = field(
+                "Mode: REGISTRATION / IP",
+                existing == null ? "REGISTRATION" : existing.optString("mode", "REGISTRATION"));
+
+        EditText incomingRoute = field(
+                "Incoming Route",
+                existing == null ? "" : existing.optString("incomingRoute", ""));
+
+        EditText outboundRoute = field(
+                "Outbound Route / Prefix",
+                existing == null ? "" : existing.optString("outboundRoute", ""));
+
+        EditText backupTarget = field(
+                "Backup Trunk ID / Name (اختیاری)",
+                existing == null ? "" : existing.optString("backupTarget", ""));
+
+        EditText codecs = field(
+                "Codec Priority (مثال: OPUS,G722,PCMU,PCMA)",
+                existing == null ? "OPUS,G722,PCMU,PCMA"
+                        : existing.optString("codecs", "OPUS,G722,PCMU,PCMA"));
+
+        form.addView(provider);
+        form.addView(host);
+        form.addView(port);
+        form.addView(username);
+        form.addView(authId);
+        form.addView(password);
+        form.addView(transport);
+        form.addView(mode);
+        form.addView(incomingRoute);
+        form.addView(outboundRoute);
+        form.addView(backupTarget);
+        form.addView(codecs);
+
+        TextView note = new TextView(this);
+        note.setText(
+                "رمز Trunk در SecureStore رمزگذاری می‌شود. "
+                        + "این نسخه Trunk را مدیریت می‌کند؛ Register/Health واقعی "
+                        + "به PBX یا Provider backend نیاز دارد.");
+        note.setTextSize(11f);
+        note.setTextColor(Color.GRAY);
+        note.setPadding(0, dp(10), 0, 0);
+        form.addView(note);
+
+        final JSONArray trunkList = trunks;
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle(index < 0 ? "افزودن SIP Trunk" : "ویرایش SIP Trunk")
+                .setView(scroll)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ذخیره", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String providerValue = provider.getText().toString().trim();
+                String hostValue = host.getText().toString().trim();
+
+                if (providerValue.isEmpty()) {
+                    provider.setError("نام Provider لازم است.");
+                    return;
+                }
+
+                if (hostValue.isEmpty()) {
+                    host.setError("Host / Domain لازم است.");
+                    return;
+                }
+
+                int portValue;
+                try {
+                    portValue = Integer.parseInt(port.getText().toString().trim());
+                } catch (Exception e) {
+                    port.setError("Port معتبر وارد کنید.");
+                    return;
+                }
+
+                if (portValue < 1 || portValue > 65535) {
+                    port.setError("Port باید بین 1 تا 65535 باشد.");
+                    return;
+                }
+
+                String transportValue = transport.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+
+                if (!transportValue.equals("TLS")
+                        && !transportValue.equals("TCP")
+                        && !transportValue.equals("UDP")) {
+                    transport.setError("فقط TLS، TCP یا UDP");
+                    return;
+                }
+
+                String modeValue = mode.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+
+                if (!modeValue.equals("REGISTRATION")
+                        && !modeValue.equals("IP")) {
+                    mode.setError("فقط REGISTRATION یا IP");
+                    return;
+                }
+
+                if (modeValue.equals("REGISTRATION")
+                        && username.getText().toString().trim().isEmpty()) {
+                    username.setError("برای Registration، Username لازم است.");
+                    return;
+                }
+
+                try {
+                    JSONObject item = existing == null
+                            ? new JSONObject()
+                            : new JSONObject(existing.toString());
+
+                    String trunkId = item.optString("id", "");
+                    if (trunkId.isEmpty()) {
+                        trunkId = "trunk_" + System.currentTimeMillis();
+                        item.put("id", trunkId);
+                    }
+
+                    String newPassword = password.getText().toString();
+                    if (!newPassword.isEmpty()) {
+                        secureStore.putSecret(
+                                "trunk_password_" + trunkId,
+                                newPassword);
+                    }
+
+                    item.put("provider", providerValue);
+                    item.put("host", hostValue);
+                    item.put("port", portValue);
+                    item.put("username", username.getText().toString().trim());
+                    item.put("authId", authId.getText().toString().trim());
+                    item.put("transport", transportValue);
+                    item.put("mode", modeValue);
+                    item.put("incomingRoute",
+                            incomingRoute.getText().toString().trim());
+                    item.put("outboundRoute",
+                            outboundRoute.getText().toString().trim());
+                    item.put("backupTarget",
+                            backupTarget.getText().toString().trim());
+                    item.put("codecs",
+                            codecs.getText().toString().trim());
+
+                    if (!item.has("enabled")) item.put("enabled", true);
+                    if (!item.has("default")) item.put("default", trunkList.length() == 0);
+
+                    JSONArray next = new JSONArray();
+
+                    for (int i = 0; i < trunkList.length(); i++) {
+                        if (i == index) {
+                            next.put(item);
+                        } else {
+                            JSONObject old = trunkList.optJSONObject(i);
+                            if (old != null) next.put(old);
+                        }
+                    }
+
+                    if (index < 0) next.put(item);
+
+                    prefs.edit()
+                            .putString("pbx_trunks_json", next.toString())
+                            .apply();
+
+                    ad.dismiss();
+                    showTrunkManager();
+
+                } catch (Exception e) {
+                    showToast("ذخیره امن Trunk ناموفق بود.");
+                }
+            });
+        });
+
+        ad.show();
+    }
+
+    private void setTrunkEnabled(int index, boolean enabled) {
+        try {
+            JSONArray trunks = new JSONArray(
+                    prefs.getString("pbx_trunks_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < trunks.length(); i++) {
+                JSONObject item = trunks.optJSONObject(i);
+                if (item == null) continue;
+
+                JSONObject copy = new JSONObject(item.toString());
+                if (i == index) copy.put("enabled", enabled);
+                next.put(copy);
+            }
+
+            prefs.edit()
+                    .putString("pbx_trunks_json", next.toString())
+                    .apply();
+
+            showTrunkManager();
+
+        } catch (Exception e) {
+            showToast("تغییر وضعیت Trunk ناموفق بود.");
+        }
+    }
+
+    private void setDefaultTrunk(int index) {
+        try {
+            JSONArray trunks = new JSONArray(
+                    prefs.getString("pbx_trunks_json", "[]"));
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < trunks.length(); i++) {
+                JSONObject item = trunks.optJSONObject(i);
+                if (item == null) continue;
+
+                JSONObject copy = new JSONObject(item.toString());
+                copy.put("default", i == index);
+                next.put(copy);
+            }
+
+            prefs.edit()
+                    .putString("pbx_trunks_json", next.toString())
+                    .apply();
+
+            showTrunkManager();
+
+        } catch (Exception e) {
+            showToast("تنظیم Default Trunk ناموفق بود.");
+        }
+    }
+
+    private void showTrunkDetails(int index) {
+        try {
+            JSONArray trunks = new JSONArray(
+                    prefs.getString("pbx_trunks_json", "[]"));
+
+            JSONObject item = trunks.optJSONObject(index);
+            if (item == null) return;
+
+            String id = item.optString("id", "");
+            boolean passwordStored = false;
+            if (!id.isEmpty()) {
+                try {
+                    String stored = secureStore.getSecret("trunk_password_" + id);
+                    passwordStored = stored != null && !stored.isEmpty();
+                } catch (Exception ignored) {}
+            }
+
+            String message =
+                    "Provider: " + item.optString("provider", "—") + "\n"
+                    + "Host: " + item.optString("host", "—")
+                    + ":" + item.optInt("port", 5061) + "\n"
+                    + "Mode: " + item.optString("mode", "REGISTRATION") + "\n"
+                    + "Transport: " + item.optString("transport", "TLS") + "\n"
+                    + "Username: " + item.optString("username", "—") + "\n"
+                    + "Auth ID: " + item.optString("authId", "—") + "\n"
+                    + "Password: " + (passwordStored ? "SecureStore ✓" : "Not stored") + "\n"
+                    + "Incoming: " + item.optString("incomingRoute", "—") + "\n"
+                    + "Outbound: " + item.optString("outboundRoute", "—") + "\n"
+                    + "Backup: " + item.optString("backupTarget", "—") + "\n"
+                    + "Codecs: " + item.optString("codecs", "—") + "\n"
+                    + "Health: CONFIGURED / backend check required";
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Trunk Details")
+                    .setMessage(message)
+                    .setPositiveButton("باشه", null)
+                    .show();
+
+        } catch (Exception e) {
+            showToast("نمایش Trunk ناموفق بود.");
+        }
+    }
+
+    private void deleteTrunk(int index) {
+        try {
+            JSONArray trunks = new JSONArray(
+                    prefs.getString("pbx_trunks_json", "[]"));
+
+            JSONObject deleting = trunks.optJSONObject(index);
+            if (deleting != null) {
+                String id = deleting.optString("id", "");
+                if (!id.isEmpty()) {
+                    secureStore.removeSecret("trunk_password_" + id);
+                }
+            }
+
+            JSONArray next = new JSONArray();
+
+            for (int i = 0; i < trunks.length(); i++) {
+                if (i == index) continue;
+                JSONObject item = trunks.optJSONObject(i);
+                if (item != null) next.put(item);
+            }
+
+            if (next.length() > 0) {
+                boolean hasDefault = false;
+                for (int i = 0; i < next.length(); i++) {
+                    JSONObject item = next.optJSONObject(i);
+                    if (item != null && item.optBoolean("default", false)) {
+                        hasDefault = true;
+                        break;
+                    }
+                }
+
+                if (!hasDefault) {
+                    JSONObject first = next.optJSONObject(0);
+                    if (first != null) first.put("default", true);
+                }
+            }
+
+            prefs.edit()
+                    .putString("pbx_trunks_json", next.toString())
+                    .apply();
+
+            showTrunkManager();
+
+        } catch (Exception e) {
+            showToast("حذف Trunk ناموفق بود.");
+        }
     }
 
     private void showIvrManager() {
