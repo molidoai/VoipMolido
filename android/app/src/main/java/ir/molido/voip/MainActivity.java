@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
         more.setTextSize(22f);
         more.setAllCaps(false);
         styleSecondaryButton(more);
-        more.setOnClickListener(v -> showCompactMoreMenu());
+        more.setOnClickListener(v -> showMoreCenter());
 
         header.addView(qr);
         header.addView(more);
@@ -600,7 +600,7 @@ public final class MainActivity extends Activity {
         navCalls.setAllCaps(false);
         navCalls.setTextColor(Color.rgb(37, 99, 235));
         navCalls.setBackgroundColor(Color.TRANSPARENT);
-        navCalls.setOnClickListener(v -> showCallHistory());
+        navCalls.setOnClickListener(v -> showCallsCenter());
 
         Button navContacts = new Button(this);
         navContacts.setText("👤\nمخاطبین");
@@ -608,7 +608,7 @@ public final class MainActivity extends Activity {
         navContacts.setAllCaps(false);
         navContacts.setTextColor(secondaryText);
         navContacts.setBackgroundColor(Color.TRANSPARENT);
-        navContacts.setOnClickListener(v -> openContacts());
+        navContacts.setOnClickListener(v -> showContactsCenter());
 
         Button navMessages = new Button(this);
         navMessages.setText("✉\nپیام‌ها");
@@ -616,10 +616,7 @@ public final class MainActivity extends Activity {
         navMessages.setAllCaps(false);
         navMessages.setTextColor(secondaryText);
         navMessages.setBackgroundColor(Color.TRANSPARENT);
-        navMessages.setOnClickListener(v ->
-                showSettingsInfo(
-                        "پیام‌ها",
-                        "مرکز پیام MOLIDO در مرحله بعد فعال می‌شود."));
+        navMessages.setOnClickListener(v -> showMessagesCenter());
 
         Button navMore = new Button(this);
         navMore.setText("☰\nبیشتر");
@@ -627,7 +624,7 @@ public final class MainActivity extends Activity {
         navMore.setAllCaps(false);
         navMore.setTextColor(secondaryText);
         navMore.setBackgroundColor(Color.TRANSPARENT);
-        navMore.setOnClickListener(v -> showCompactMoreMenu());
+        navMore.setOnClickListener(v -> showMoreCenter());
 
         LinearLayout.LayoutParams np =
                 new LinearLayout.LayoutParams(
@@ -647,6 +644,105 @@ public final class MainActivity extends Activity {
         connectivityManager.start();
         configureWebView();
         checkUpdates(false);
+    }
+
+    private void showCallsCenter() {
+        String[] items = {
+                "همه تماس‌ها",
+                "تماس‌های ازدست‌رفته",
+                "مخاطبین",
+                "شماره‌گیر"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("تماس‌ها")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0 || which == 1) {
+                        showCallHistory();
+                    } else if (which == 2) {
+                        openContacts();
+                    } else if (which == 3) {
+                        showCleanDialpad();
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showContactsCenter() {
+        String[] items = {
+                "همه مخاطبین",
+                "جستجو و انتخاب برای تماس",
+                "شماره‌گیر"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("مخاطبین")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0 || which == 1) {
+                        openContacts();
+                    } else if (which == 2) {
+                        showCleanDialpad();
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showMessagesCenter() {
+        String[] items = {
+                "صندوق پیام",
+                "پیام‌های ارسال‌شده",
+                "گفتگوها"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("پیام‌ها")
+                .setItems(items, (dialog, which) -> {
+                    showSettingsInfo(
+                            "پیام‌ها",
+                            "رابط پیام آماده است. ارسال و دریافت واقعی SMS "
+                                    + "بعد از اتصال Provider/API فعال می‌شود.");
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showMoreCenter() {
+        String[] items = {
+                "تنظیمات",
+                "اسکن QR",
+                "بررسی بروزرسانی",
+                "خدمات MOLIDO",
+                "درباره"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("بیشتر")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showSettingsHub();
+                    } else if (which == 1) {
+                        startQrScan();
+                    } else if (which == 2) {
+                        checkUpdates(true);
+                    } else if (which == 3) {
+                        try {
+                            startActivity(
+                                    new Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse(HOME)));
+                        } catch (Exception e) {
+                            showToast("باز کردن خدمات MOLIDO ممکن نشد.");
+                        }
+                    } else if (which == 4) {
+                        showSettingsInfo(
+                                "MOLIDO VoIP",
+                                "Version " + BuildConfig.VERSION_NAME);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
     }
 
     private void showCleanDialpad() {
