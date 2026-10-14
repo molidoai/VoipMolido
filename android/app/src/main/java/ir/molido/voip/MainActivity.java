@@ -63,6 +63,8 @@ public final class MainActivity extends Activity {
     private Button speakerButton;
     private TextView callStatus;
     private TextView audioQuality;
+    private TextView routeStatus;
+    private MolidoConnectivityManager connectivityManager;
     private String pendingDialNumber = "";
     private boolean speakerEnabled = false;
 
@@ -90,6 +92,20 @@ public final class MainActivity extends Activity {
                 (profile, score, loss, jitter, rtt, down, up) ->
                         runOnUiThread(() -> updateSmartAudioUi(
                                 profile, score, loss, jitter, rtt, down, up)));
+        sipManager.setRouteListener(
+                (networkType, route, reachable) -> runOnUiThread(() -> {
+                    if (routeStatus != null) {
+                        routeStatus.setText(reachable
+                                ? "مسیر • " + networkType + " • " + route
+                                : "مسیر • Offline");
+                        routeStatus.setTextColor(reachable
+                                ? Color.rgb(16, 185, 129)
+                                : Color.rgb(220, 38, 38));
+                    }
+                }));
+        connectivityManager = new MolidoConnectivityManager(this,
+                (reachable, type, metered) -> runOnUiThread(() ->
+                        sipManager.onNetworkStateChanged(reachable, type, metered)));
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
@@ -197,6 +213,13 @@ public final class MainActivity extends Activity {
         statusCard.addView(profileTitle);
         statusCard.addView(extensionLabel);
         statusCard.addView(connectionStatus);
+
+        routeStatus = new TextView(this);
+        routeStatus.setText("مسیر • در حال بررسی");
+        routeStatus.setTextSize(11f);
+        routeStatus.setTextColor(Color.rgb(107, 114, 128));
+        routeStatus.setPadding(0, dp(4), 0, 0);
+        statusCard.addView(routeStatus);
 
         registerButton = new Button(this);
         registerButton.setText(profileReady ? "Register SIP" : "تنظیمات SIP");
@@ -554,6 +577,7 @@ public final class MainActivity extends Activity {
         root.addView(footer);
 
         setContentView(root);
+        connectivityManager.start();
 
         configureWebView();
         web.loadUrl(HOME);
@@ -767,6 +791,10 @@ public final class MainActivity extends Activity {
                 "TURN Mode: OFF / UDP / TCP / TLS",
                 prefs.getString("turn_transport", "OFF"));
 
+        EditText routeMode = field(
+                "Smart Route: AUTO / DIRECT / RELAY",
+                prefs.getString("route_mode", "AUTO"));
+
         EditText sipUsername = field("SIP Username",
                 prefs.getString("sip_username", ""));
 
@@ -797,6 +825,7 @@ public final class MainActivity extends Activity {
         form.addView(turnUsername);
         form.addView(turnPassword);
         form.addView(turnTransport);
+        form.addView(routeMode);
         form.addView(sipUsername);
         form.addView(sipPassword);
         form.addView(transport);
@@ -854,6 +883,15 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
+                String routeModeValue = routeMode.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+                if (!routeModeValue.equals("AUTO")
+                        && !routeModeValue.equals("DIRECT")
+                        && !routeModeValue.equals("RELAY")) {
+                    routeMode.setError("Smart Route فقط AUTO، DIRECT یا RELAY");
+                    return;
+                }
+
                 if (!turnTransportValue.equals("OFF")
                         && (turnServer.getText().toString().trim().isEmpty()
                         || turnUsername.getText().toString().trim().isEmpty()
@@ -887,6 +925,7 @@ public final class MainActivity extends Activity {
                         .putString("turn_server", turnServer.getText().toString().trim())
                         .putString("turn_username", turnUsername.getText().toString().trim())
                         .putString("turn_transport", turnTransportValue)
+                        .putString("route_mode", routeModeValue)
                         .putString("sip_username", sipUsername.getText().toString().trim())
                         .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
@@ -1089,6 +1128,9 @@ public final class MainActivity extends Activity {
                     prefs.getString("turn_username", "").trim(),
                     getStoredTurnPassword(),
                     prefs.getString("turn_transport", "OFF").trim());
+
+            sipManager.setRouteMode(
+                    prefs.getString("route_mode", "AUTO").trim());
 
             sipManager.register(
                     registrar,
@@ -1444,6 +1486,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try {
+            if (connectivityManager != null) connectivityManager.stop();
+        } catch (Exception ignored) {
+        }
         try {
             if (sipManager != null) sipManager.shutdown();
         } catch (Exception ignored) {

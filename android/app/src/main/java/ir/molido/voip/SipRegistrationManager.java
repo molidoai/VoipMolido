@@ -33,11 +33,16 @@ public final class SipRegistrationManager {
                             float downloadKbps, float uploadKbps);
     }
 
+    public interface RouteListener {
+        void onRouteChanged(String networkType, String route, boolean reachable);
+    }
+
     private final Context appContext;
     private final Listener listener;
 
     private CallEventListener callEventListener;
     private AudioQualityListener audioQualityListener;
+    private RouteListener routeListener;
     private SmartAudioController smartAudioController;
     private Core core;
     private Account account;
@@ -50,6 +55,10 @@ public final class SipRegistrationManager {
     private String turnUsername = "";
     private String turnPassword = "";
     private String turnTransport = "OFF";
+    private String routeMode = "AUTO";
+    private String activeNetworkType = "Unknown";
+    private boolean networkReachable = true;
+    private boolean pendingNatRefresh = false;
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -139,6 +148,10 @@ public final class SipRegistrationManager {
             } else if (state == Call.State.Released) {
                 notifyCall("Ended", "Call released", false);
                 currentCall = null;
+                if (pendingNatRefresh && core != null) {
+                    pendingNatRefresh = false;
+                    configureNatTraversal(core);
+                }
             }
         }
     };
@@ -154,6 +167,46 @@ public final class SipRegistrationManager {
 
     public void setAudioQualityListener(AudioQualityListener listener) {
         this.audioQualityListener = listener;
+    }
+
+    public void setRouteListener(RouteListener listener) {
+        this.routeListener = listener;
+    }
+
+    public synchronized void setRouteMode(String mode) {
+        String normalized = clean(mode).toUpperCase(java.util.Locale.ROOT);
+        if (!"AUTO".equals(normalized)
+                && !"DIRECT".equals(normalized)
+                && !"RELAY".equals(normalized)) {
+            normalized = "AUTO";
+        }
+        routeMode = normalized;
+        if (core != null && currentCall == null) {
+            configureNatTraversal(core);
+        } else if (currentCall != null) {
+            pendingNatRefresh = true;
+        }
+    }
+
+    public synchronized void onNetworkStateChanged(
+            boolean reachable, String networkType, boolean metered) {
+        networkReachable = reachable;
+        activeNetworkType = clean(networkType).isEmpty()
+                ? "Unknown" : clean(networkType);
+
+        if (core != null) {
+            try {
+                core.setNetworkReachable(reachable);
+            } catch (Exception ignored) {}
+
+            if (currentCall == null) {
+                configureNatTraversal(core);
+            } else {
+                pendingNatRefresh = true;
+            }
+        }
+
+        notifyRoute(currentRouteLabel(), reachable);
     }
 
     public synchronized void setStunServer(String server) {
@@ -355,6 +408,7 @@ public final class SipRegistrationManager {
         core.setAutoIterateEnabled(true);
         core.addListener(coreListener);
         core.setUserAgent("MOLIDO-VOIP", BuildConfig.VERSION_NAME);
+        core.setNetworkReachable(networkReachable);
 
         configureHdAudio(core);
         smartAudioController = new SmartAudioController(
@@ -401,12 +455,23 @@ public final class SipRegistrationManager {
             policy.setIceEnabled(true);
             policy.setUpnpEnabled(false);
 
-            boolean turnEnabled = !"OFF".equals(turnTransport)
+            boolean turnConfigured = !"OFF".equals(turnTransport)
                     && !turnServer.isEmpty()
                     && !turnUsername.isEmpty()
                     && !turnPassword.isEmpty();
 
-            if (turnEnabled) {
+            boolean useTurn;
+            if ("RELAY".equals(routeMode)) {
+                useTurn = turnConfigured;
+            } else if ("DIRECT".equals(routeMode)) {
+                useTurn = false;
+            } else {
+                useTurn = turnConfigured
+                        && ("Mobile".equals(activeNetworkType)
+                        || "VPN".equals(activeNetworkType));
+            }
+
+            if (useTurn) {
                 policy.setStunServer(turnServer);
                 policy.setStunServerUsername(turnUsername);
                 policy.setStunEnabled(false);
@@ -428,9 +493,10 @@ public final class SipRegistrationManager {
                     policy.setStunEnabled(false);
                 }
             }
+
             targetCore.setNatPolicy(policy);
-        } catch (Exception ignored) {
-        }
+            notifyRoute(currentRouteLabel(), networkReachable);
+        } catch (Exception ignored) {}
     }
 
     private void installTurnAuthInfo() {
@@ -511,6 +577,28 @@ public final class SipRegistrationManager {
         if ("UDP".equals(v)) return TransportType.Udp;
         if ("TCP".equals(v)) return TransportType.Tcp;
         return TransportType.Tls;
+    }
+
+    private String currentRouteLabel() {
+        boolean turnConfigured = !"OFF".equals(turnTransport)
+                && !turnServer.isEmpty()
+                && !turnUsername.isEmpty()
+                && !turnPassword.isEmpty();
+        boolean relay;
+        if ("RELAY".equals(routeMode)) relay = turnConfigured;
+        else if ("DIRECT".equals(routeMode)) relay = false;
+        else relay = turnConfigured
+                && ("Mobile".equals(activeNetworkType)
+                || "VPN".equals(activeNetworkType));
+        if (relay) return "TURN-" + turnTransport;
+        if (!stunServer.isEmpty()) return "ICE/STUN";
+        return "ICE";
+    }
+
+    private void notifyRoute(String route, boolean reachable) {
+        if (routeListener != null) {
+            routeListener.onRouteChanged(activeNetworkType, route, reachable);
+        }
     }
 
     private void notifyState(String state, String detail, boolean success) {
