@@ -1104,7 +1104,7 @@ public final class MainActivity extends Activity {
                     || getPackageManager().canRequestPackageInstalls()) {
                 android.net.Uri uri = pendingInstallUri;
                 pendingInstallUri = null;
-                launchPackageInstaller(uri);
+                showInstallReadyDialog(uri);
             } else {
                 showToast("اجازه نصب بروزرسانی فعال نشد.");
             }
@@ -4961,7 +4961,7 @@ public final class MainActivity extends Activity {
 
                 pendingInstallUri = apkUri;
                 setStatus("بررسی امنیتی موفق ✓ • آماده نصب");
-                runOnUiThread(() -> requestUpdateInstall(apkUri));
+                runOnUiThread(() -> showInstallReadyDialog(apkUri));
             } catch (Exception e) {
                 setStatus("بررسی SHA-256 بروزرسانی ناموفق بود.");
             }
@@ -4991,6 +4991,19 @@ public final class MainActivity extends Activity {
                     java.util.Locale.US, "%02x", b & 0xff));
         }
         return hex.toString();
+    }
+
+    private void showInstallReadyDialog(android.net.Uri apkUri) {
+        new AlertDialog.Builder(this)
+                .setTitle("آماده نصب")
+                .setMessage(
+                        "بروزرسانی MOLIDO دانلود و بررسی امنیتی شد.\n\n"
+                        + "برای ادامه، نصب بروزرسانی را بزنید.")
+                .setNegativeButton("بعداً", null)
+                .setPositiveButton(
+                        "نصب بروزرسانی",
+                        (d, w) -> requestUpdateInstall(apkUri))
+                .show();
     }
 
     private void requestUpdateInstall(android.net.Uri apkUri) {
