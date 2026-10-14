@@ -9,10 +9,13 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -395,6 +398,16 @@ public final class MainActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(false);
+        web.getSettings().setAllowFileAccessFromFileURLs(false);
+        web.getSettings().setAllowUniversalAccessFromFileURLs(false);
+        web.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
+        web.getSettings().setSupportMultipleWindows(false);
+        web.getSettings().setGeolocationEnabled(false);
+        web.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            web.getSettings().setSafeBrowsingEnabled(true);
+        }
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -449,6 +462,21 @@ public final class MainActivity extends Activity {
             String language = "fa";
 
             String value = raw == null ? "" : raw.trim();
+
+            if (value.length() > 4096) {
+                throw new IllegalArgumentException("QR payload too large");
+            }
+
+            if (value.toLowerCase().contains("\"password\"")
+                    || value.toLowerCase().contains("\"secret\"")
+                    || value.toLowerCase().contains("\"token\"")
+                    || value.toLowerCase().contains("sippassword=")
+                    || value.toLowerCase().contains("password=")
+                    || value.toLowerCase().contains("secret=")
+                    || value.toLowerCase().contains("token=")) {
+                throw new IllegalArgumentException(
+                        "Sensitive credentials are not accepted in QR");
+            }
 
             if (value.startsWith("{")) {
                 JSONObject o = new JSONObject(value);

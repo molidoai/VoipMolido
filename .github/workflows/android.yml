@@ -16,6 +16,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,16 +29,38 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Security policy checks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -q 'android:allowBackup="false"' \
+            android/app/src/main/AndroidManifest.xml
+
+          grep -q 'android:usesCleartextTraffic="false"' \
+            android/app/src/main/AndroidManifest.xml
+
+          grep -q 'cleartextTrafficPermitted="false"' \
+            android/app/src/main/res/xml/network_security_config.xml
+
+          if git grep -nE \
+            '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' \
+            -- ':!*.md' ':!docs/**'; then
+            echo "Potential secret detected in repository." >&2
+            exit 1
+          fi
+
       - name: Decode signing key
         env:
           KEYSTORE_B64: ${{ secrets.MOLIDO_KEYSTORE_BASE64 }}
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "MOLIDO_KEYSTORE_BASE64 is missing" >&2
-            exit 1
-          fi
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/molido-release.jks"
-          echo "MOLIDO_KEYSTORE_PATH=$RUNNER_TEMP/molido-release.jks" >> "$GITHUB_ENV"
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          printf '%s' "$KEYSTORE_B64" | base64 -d \
+            > "$RUNNER_TEMP/molido-release.jks"
+          chmod 600 "$RUNNER_TEMP/molido-release.jks"
+          echo "MOLIDO_KEYSTORE_PATH=$RUNNER_TEMP/molido-release.jks" \
+            >> "$GITHUB_ENV"
 
       - name: Build signed release APK
         working-directory: android
@@ -46,16 +69,45 @@ jobs:
           MOLIDO_KEY_ALIAS: ${{ secrets.MOLIDO_KEY_ALIAS }}
           MOLIDO_KEY_PASSWORD: ${{ secrets.MOLIDO_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           test -n "$MOLIDO_KEYSTORE_PASSWORD"
           test -n "$MOLIDO_KEY_ALIAS"
           test -n "$MOLIDO_KEY_PASSWORD"
           gradle :app:assembleRelease --no-daemon
 
+      - name: Verify APK signature and generate SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="$(find android/app/build/outputs/apk/release \
+            -name '*.apk' | head -n 1)"
+
+          test -f "$APK"
+
+          APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" \
+            -type f -name apksigner 2>/dev/null | sort -V | tail -n 1)"
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner not found; cannot verify release signature." >&2
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --verbose "$APK"
+
+          (
+            cd "$(dirname "$APK")"
+            sha256sum "$(basename "$APK")" \
+              > "$(basename "$APK").sha256"
+          )
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: molido-voip-release
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/release/*.sha256
           if-no-files-found: error
 
       - name: Publish GitHub Release for version tag
@@ -63,11 +115,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
-          cp "$APK" "MOLIDO-VOIP-${GITHUB_REF_NAME}.apk"
+          set -euo pipefail
+
+          APK="$(find android/app/build/outputs/apk/release \
+            -name '*.apk' | head -n 1)"
+
+          SUM="$(find android/app/build/outputs/apk/release \
+            -name '*.sha256' | head -n 1)"
+
+          FINAL_APK="MOLIDO-VOIP-${GITHUB_REF_NAME}.apk"
+          FINAL_SUM="${FINAL_APK}.sha256"
+
+          cp "$APK" "$FINAL_APK"
+
+          HASH="$(cut -d' ' -f1 "$SUM")"
+          printf '%s  %s\n' "$HASH" "$FINAL_APK" > "$FINAL_SUM"
+
           gh release create "$GITHUB_REF_NAME" \
-            "MOLIDO-VOIP-${GITHUB_REF_NAME}.apk" \
+            "$FINAL_APK" \
+            "$FINAL_SUM" \
             --repo "$GITHUB_REPOSITORY" \
             --title "MOLIDO VOIP ${GITHUB_REF_NAME}" \
-            --notes "Automatic signed Android release ${GITHUB_REF_NAME}." \
+            --notes "Automatic signed Android release ${GITHUB_REF_NAME}. APK signature verified in CI. SHA-256 checksum included." \
             --verify-tag
