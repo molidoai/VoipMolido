@@ -70,6 +70,10 @@ public final class MainActivity extends Activity {
     private String pendingDialNumber = "";
     private boolean speakerEnabled = false;
     private boolean pendingIncomingAnswer = false;
+    private String activeCallPeer = "";
+    private String activeCallDirection = "";
+    private boolean activeCallConnected = false;
+    private long activeCallStartedAt = 0L;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -524,18 +528,10 @@ public final class MainActivity extends Activity {
         quickActions.setPadding(0, dp(12), 0, dp(6));
 
         Button recentButton = new Button(this);
-        recentButton.setText("تماس اخیر");
+        recentButton.setText("تماس‌های اخیر");
         recentButton.setAllCaps(false);
         styleSecondaryButton(recentButton);
-        recentButton.setOnClickListener(v -> {
-            String last = prefs.getString("last_call_number", "").trim();
-            if (last.isEmpty()) {
-                showToast("هنوز تماس ثبت نشده است.");
-            } else {
-                dialInput.setText(last);
-                dialInput.setSelection(last.length());
-            }
-        });
+        recentButton.setOnClickListener(v -> showCallHistory());
 
         Button contactsButton = new Button(this);
         contactsButton.setText("QR");
@@ -1441,6 +1437,23 @@ public final class MainActivity extends Activity {
         }
 
         if ("Incoming".equals(state)) {
+            activeCallDirection = "IN";
+            activeCallPeer = safeDetail.isEmpty() ? "تماس ورودی" : safeDetail;
+            activeCallConnected = false;
+            activeCallStartedAt = System.currentTimeMillis();
+        } else if ("Calling".equals(state)) {
+            activeCallDirection = "OUT";
+            activeCallPeer = number;
+            activeCallConnected = false;
+            activeCallStartedAt = System.currentTimeMillis();
+        } else if ("Connected".equals(state)) {
+            activeCallConnected = true;
+            if (activeCallStartedAt == 0L) {
+                activeCallStartedAt = System.currentTimeMillis();
+            }
+        }
+
+        if ("Incoming".equals(state)) {
             text = "تماس ورودی" + (safeDetail.isEmpty() ? "" : " • " + safeDetail);
         }
 
@@ -1469,7 +1482,34 @@ public final class MainActivity extends Activity {
         if ("Ended".equals(state) || "Failed".equals(state)) {
             muteButton.setText("Mute");
             setSpeakerEnabled(false);
-            saveRecentOutgoingCall(number, state);
+
+            String peer = activeCallPeer;
+            if (peer == null || peer.trim().isEmpty()) {
+                peer = number;
+            }
+
+            String result;
+            if ("IN".equals(activeCallDirection) && !activeCallConnected) {
+                result = "MISSED";
+            } else if ("Failed".equals(state)) {
+                result = "FAILED";
+            } else {
+                result = "COMPLETED";
+            }
+
+            saveCallHistoryEntry(
+                    activeCallDirection.isEmpty() ? "OUT" : activeCallDirection,
+                    peer,
+                    result,
+                    activeCallStartedAt == 0L
+                            ? System.currentTimeMillis()
+                            : activeCallStartedAt,
+                    System.currentTimeMillis());
+
+            activeCallPeer = "";
+            activeCallDirection = "";
+            activeCallConnected = false;
+            activeCallStartedAt = 0L;
         }
     }
 
@@ -1509,6 +1549,116 @@ public final class MainActivity extends Activity {
 
         if (speakerButton != null) {
             speakerButton.setText(enabled ? "Earpiece" : "Speaker");
+        }
+    }
+
+    private void saveCallHistoryEntry(
+            String direction,
+            String peer,
+            String result,
+            long startedAt,
+            long endedAt) {
+
+        if (peer == null || peer.trim().isEmpty()) return;
+
+        try {
+            JSONArray history = new JSONArray(
+                    prefs.getString("call_history_json", "[]"));
+
+            JSONObject item = new JSONObject();
+            item.put("direction", direction == null ? "OUT" : direction);
+            item.put("peer", peer.trim());
+            item.put("result", result == null ? "" : result);
+            item.put("startedAt", startedAt);
+            item.put("endedAt", endedAt);
+
+            JSONArray next = new JSONArray();
+            next.put(item);
+
+            int limit = Math.min(history.length(), 19);
+            for (int i = 0; i < limit; i++) {
+                JSONObject old = history.optJSONObject(i);
+                if (old != null) next.put(old);
+            }
+
+            prefs.edit()
+                    .putString("call_history_json", next.toString())
+                    .putString("last_call_number", peer.trim())
+                    .putString("last_call_result", result == null ? "" : result)
+                    .putLong("last_call_time", endedAt)
+                    .apply();
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showCallHistory() {
+        try {
+            JSONArray history = new JSONArray(
+                    prefs.getString("call_history_json", "[]"));
+
+            if (history.length() == 0) {
+                showToast("هنوز تماسی ثبت نشده است.");
+                return;
+            }
+
+            int count = Math.min(history.length(), 20);
+            String[] rows = new String[count];
+            String[] peers = new String[count];
+
+            java.text.SimpleDateFormat sdf =
+                    new java.text.SimpleDateFormat(
+                            "MM/dd  HH:mm",
+                            java.util.Locale.getDefault());
+
+            for (int i = 0; i < count; i++) {
+                JSONObject item = history.optJSONObject(i);
+                if (item == null) continue;
+
+                String direction = item.optString("direction", "OUT");
+                String peer = item.optString("peer", "—");
+                String result = item.optString("result", "");
+                long endedAt = item.optLong("endedAt", 0L);
+
+                String icon = "IN".equals(direction) ? "↙" : "↗";
+                String state;
+                if ("MISSED".equals(result)) state = "از دست رفته";
+                else if ("FAILED".equals(result)) state = "ناموفق";
+                else state = "پایان یافته";
+
+                String when = endedAt > 0
+                        ? sdf.format(new java.util.Date(endedAt))
+                        : "";
+
+                rows[i] = icon + "  " + peer + "   •   " + state
+                        + (when.isEmpty() ? "" : "   •   " + when);
+                peers[i] = peer;
+            }
+
+            new AlertDialog.Builder(this)
+                    .setTitle("تماس‌های اخیر")
+                    .setItems(rows, (dialog, which) -> {
+                        String peer = peers[which];
+                        if (peer != null && !peer.isEmpty()
+                                && !"تماس ورودی".equals(peer)) {
+                            dialInput.setText(peer);
+                            dialInput.setSelection(peer.length());
+                        }
+                    })
+                    .setNeutralButton("پاک کردن تاریخچه", (dialog, which) -> {
+                        prefs.edit()
+                                .remove("call_history_json")
+                                .remove("last_call_number")
+                                .remove("last_call_result")
+                                .remove("last_call_time")
+                                .apply();
+                        showToast("تاریخچه تماس پاک شد.");
+                    })
+                    .setNegativeButton("بستن", null)
+                    .show();
+
+        } catch (Exception e) {
+            showToast("خواندن تاریخچه تماس ناموفق بود.");
         }
     }
 
