@@ -392,7 +392,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout dialCard = new LinearLayout(this);
         dialCard.setOrientation(LinearLayout.VERTICAL);
-        dialCard.setPadding(dp(14), dp(14), dp(14), dp(14));
+        dialCard.setPadding(dp(10), dp(8), dp(10), dp(8));
         dialCard.setBackgroundColor(Color.TRANSPARENT);
 
         dialInput = new EditText(this);
@@ -400,6 +400,7 @@ public final class MainActivity extends Activity {
         dialInput.setInputType(InputType.TYPE_CLASS_PHONE);
         dialInput.setGravity(Gravity.CENTER);
         dialInput.setSingleLine(true);
+        dialInput.setSelectAllOnFocus(false);
         dialInput.setTextSize(30f);
         dialInput.setTextColor(primaryText);
         dialInput.setHintTextColor(secondaryText);
@@ -452,12 +453,23 @@ public final class MainActivity extends Activity {
                                     .toString()
                                     .split("\n")[0];
                     dialInput.append(value);
+                    v.performHapticFeedback(
+                            android.view.HapticFeedbackConstants.KEYBOARD_TAP);
                 });
+
+                if ("0".equals(digit)) {
+                    key.setOnLongClickListener(v -> {
+                        dialInput.append("+");
+                        v.performHapticFeedback(
+                                android.view.HapticFeedbackConstants.LONG_PRESS);
+                        return true;
+                    });
+                }
 
                 LinearLayout.LayoutParams kp =
                         new LinearLayout.LayoutParams(
                                 0,
-                                dp(82),
+                                dp(76),
                                 1f);
                 kp.setMargins(dp(8), dp(2), dp(8), dp(2));
                 keyRow.addView(key, kp);
@@ -484,7 +496,11 @@ public final class MainActivity extends Activity {
         callButton.setTextColor(Color.WHITE);
         callButton.setAllCaps(false);
         callButton.setBackground(roundedBg("#22C55E", 44, null));
-        callButton.setOnClickListener(v -> beginOutgoingCall());
+        callButton.setOnClickListener(v -> {
+            v.performHapticFeedback(
+                    android.view.HapticFeedbackConstants.CONFIRM);
+            beginOutgoingCall();
+        });
 
         Button deleteDigit = new Button(this);
         deleteDigit.setText("⌫");
@@ -495,7 +511,15 @@ public final class MainActivity extends Activity {
             int len = dialInput.length();
             if (len > 0) {
                 dialInput.getText().delete(len - 1, len);
+                v.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.KEYBOARD_TAP);
             }
+        });
+        deleteDigit.setOnLongClickListener(v -> {
+            dialInput.setText("");
+            v.performHapticFeedback(
+                    android.view.HapticFeedbackConstants.LONG_PRESS);
+            return true;
         });
 
         LinearLayout.LayoutParams sideAction =
@@ -930,11 +954,10 @@ public final class MainActivity extends Activity {
 
     private void showUpdateCenter() {
         String message =
-                "نسخه نصب‌شده: v" + BuildConfig.VERSION_NAME
+                "نسخه فعلی: v" + BuildConfig.VERSION_NAME
                         + "\n\n"
-                        + "MOLIDO هنگام اجرای برنامه نسخه رسمی GitHub "
-                        + "را بررسی می‌کند. نصب بروزرسانی با تأیید کاربر "
-                        + "و از طریق APK رسمی انجام می‌شود.";
+                        + "بررسی نسخه جدید از GitHub رسمی MOLIDO انجام می‌شود. "
+                        + "پس از دانلود، SHA-256 بررسی و سپس نصب‌کننده Android باز می‌شود.";
 
         new AlertDialog.Builder(this)
                 .setTitle("مرکز بروزرسانی")
@@ -4833,7 +4856,7 @@ public final class MainActivity extends Activity {
             pendingInstallUri = null;
             updateDownloadId = dm.enqueue(request);
 
-            setStatus("در حال دانلود " + info.tag + " ...");
+            setStatus("در حال دانلود " + info.tag + " • لطفاً صبر کنید");
             showToast("دانلود بروزرسانی شروع شد.");
         } catch (Exception e) {
             setStatus("شروع دانلود بروزرسانی ناموفق بود.");
@@ -4890,7 +4913,7 @@ public final class MainActivity extends Activity {
                 }
 
                 pendingInstallUri = apkUri;
-                setStatus("دانلود و بررسی امنیتی کامل شد.");
+                setStatus("دانلود کامل شد • بررسی امنیتی موفق");
                 runOnUiThread(() -> requestUpdateInstall(apkUri));
             } catch (Exception e) {
                 setStatus("بررسی SHA-256 بروزرسانی ناموفق بود.");
@@ -4955,7 +4978,7 @@ public final class MainActivity extends Activity {
             install.addFlags(
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(install);
-            setStatus("آماده نصب • تأیید نهایی با Android");
+            setStatus("آماده نصب • Install را در Android بزنید");
         } catch (Exception e) {
             setStatus("باز کردن نصب‌کننده Android ناموفق بود.");
             showToast("نصب‌کننده باز نشد.");
