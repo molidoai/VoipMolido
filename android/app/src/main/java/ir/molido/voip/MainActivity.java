@@ -80,6 +80,7 @@ public final class MainActivity extends Activity {
     private String activeCallDirection = "";
     private boolean activeCallConnected = false;
     private long activeCallStartedAt = 0L;
+    private boolean adminUnlocked = false;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -219,8 +220,8 @@ public final class MainActivity extends Activity {
                 && passwordReady;
 
         connectionStatus.setText(profileReady
-                ? "●  Offline • آماده Register"
-                : "●  تنظیمات Secure SIP ناقص");
+                ? "●  آماده اتصال"
+                : "●  حساب تلفن تنظیم نشده");
         connectionStatus.setTextSize(12f);
         connectionStatus.setTextColor(profileReady
                 ? Color.rgb(37, 99, 235)
@@ -235,15 +236,19 @@ public final class MainActivity extends Activity {
         routeStatus.setTextSize(11f);
         routeStatus.setTextColor(Color.rgb(107, 114, 128));
         routeStatus.setPadding(0, dp(4), 0, 0);
+        routeStatus.setVisibility(adminUnlocked
+                ? android.view.View.VISIBLE
+                : android.view.View.GONE);
         statusCard.addView(routeStatus);
 
         registerButton = new Button(this);
-        registerButton.setText(profileReady ? "Register SIP" : "تنظیمات SIP");
+        registerButton.setText(profileReady ? "اتصال" : "تنظیم حساب");
         registerButton.setAllCaps(false);
         stylePrimaryButton(registerButton);
         registerButton.setOnClickListener(v -> {
             if (!isSipProfileReady()) {
-                showSettings();
+                if (adminUnlocked) showSettings();
+                else showSettingsHub();
                 return;
             }
             startSipRegistration();
@@ -265,6 +270,9 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         unregLp.setMargins(0, dp(6), 0, 0);
+        unregisterButton.setVisibility(adminUnlocked
+                ? android.view.View.VISIBLE
+                : android.view.View.GONE);
         statusCard.addView(unregisterButton, unregLp);
 
         dashboard.addView(statusCard);
@@ -374,13 +382,10 @@ public final class MainActivity extends Activity {
         smartQuick.setGravity(Gravity.CENTER);
 
         Button quickRegister = new Button(this);
-        quickRegister.setText("SIP");
+        quickRegister.setText("تماس‌ها");
         quickRegister.setAllCaps(false);
         styleSecondaryButton(quickRegister);
-        quickRegister.setOnClickListener(v -> {
-            if (isSipProfileReady()) startSipRegistration();
-            else showSettingsHub();
-        });
+        quickRegister.setOnClickListener(v -> showCallHistory());
 
         Button quickSettings = new Button(this);
         quickSettings.setText("تنظیمات");
@@ -422,14 +427,18 @@ public final class MainActivity extends Activity {
         audioQuality = new TextView(this);
         String configuredStun = prefs.getString("stun_server", "").trim();
         String configuredTurn = prefs.getString("turn_transport", "OFF").trim();
-        if (!"OFF".equalsIgnoreCase(configuredTurn)) {
-            audioQuality.setText("Smart Audio • ICE + TURN " +
-                    configuredTurn.toUpperCase(java.util.Locale.ROOT));
+        if (adminUnlocked) {
+            if (!"OFF".equalsIgnoreCase(configuredTurn)) {
+                audioQuality.setText("Smart Audio • ICE + TURN "
+                        + configuredTurn.toUpperCase(java.util.Locale.ROOT));
+            } else {
+                audioQuality.setText(
+                        configuredStun.isEmpty()
+                                ? "Smart Audio • ICE آماده • STUN تنظیم نشده"
+                                : "Smart Audio • ICE + STUN آماده");
+            }
         } else {
-            audioQuality.setText(
-                    configuredStun.isEmpty()
-                            ? "Smart Audio • ICE آماده • STUN تنظیم نشده"
-                            : "Smart Audio • ICE + STUN آماده");
+            audioQuality.setText("کیفیت تماس • آماده");
         }
         audioQuality.setTextSize(11f);
         audioQuality.setTextColor(
@@ -866,14 +875,16 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
 
         TextView title = new TextView(this);
-        title.setText("تنظیمات");
+        title.setText(adminUnlocked ? "تنظیمات مدیریت" : "تنظیمات");
         title.setTextSize(24f);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("MOLIDO VoIP • تنظیمات ساده، دسته‌بندی‌شده و حرفه‌ای");
+        subtitle.setText(adminUnlocked
+                ? "MOLIDO VoIP • حالت مدیریت فعال"
+                : "MOLIDO VoIP • ساده و کاربردی");
         subtitle.setTextSize(12f);
         subtitle.setTextColor(darkMode
                 ? Color.rgb(156, 163, 175)
@@ -884,44 +895,35 @@ public final class MainActivity extends Activity {
         addSettingsSection(
                 root,
                 "👤",
-                "حساب و پروفایل",
+                "حساب من",
                 accountSummary(),
-                () -> showSettings());
+                () -> {
+                    if (adminUnlocked) {
+                        showSettings();
+                    } else {
+                        showSettingsInfo(
+                                "حساب من",
+                                "نام و داخلی شما توسط مدیر سیستم تنظیم می‌شود.");
+                    }
+                });
 
         addSettingsSection(
                 root,
                 "☎",
                 "تماس و صدا",
-                "Smart Audio • Codec • Speaker • Microphone",
+                "میکروفن • بلندگو • کیفیت تماس",
                 () -> showSettingsInfo(
                         "تماس و صدا",
-                        "تنظیمات صوتی فعال شامل Smart Audio، Echo Cancellation، "
-                                + "Adaptive Jitter و اولویت Codecها است. "
-                                + "کنترل‌های تخصصی‌تر در نسخه‌های بعدی به این بخش منتقل می‌شوند."));
-
-        addSettingsSection(
-                root,
-                "🌐",
-                "شبکه و اتصال",
-                networkSummary(),
-                () -> showSettings());
-
-        addSettingsSection(
-                root,
-                "🔒",
-                "امنیت",
-                securitySummary(),
-                () -> showSettings());
+                        "MOLIDO به‌صورت خودکار کیفیت تماس را برای شبکه فعلی تنظیم می‌کند."));
 
         addSettingsSection(
                 root,
                 "🔔",
-                "اعلان‌ها و تماس ورودی",
-                "اعلان تماس • تماس ازدست‌رفته • مزاحم نشوید",
+                "اعلان‌ها",
+                "تماس ورودی • تماس ازدست‌رفته",
                 () -> showSettingsInfo(
-                        "اعلان‌ها و تماس ورودی",
-                        "این بخش برای مدیریت تماس ورودی، اعلان تماس ازدست‌رفته، "
-                                + "صدای زنگ و حالت مزاحم نشوید آماده شده است."));
+                        "اعلان‌ها",
+                        "تنظیمات ساده اعلان تماس در این بخش قرار می‌گیرد."));
 
         addSettingsSection(
                 root,
@@ -939,36 +941,168 @@ public final class MainActivity extends Activity {
                 "نسخه فعلی v" + BuildConfig.VERSION_NAME,
                 () -> checkUpdates(true));
 
-        addSettingsSection(
-                root,
-                "PBX",
-                "مرکز PBX",
-                pbxSummary(),
-                () -> showPbxCenter());
+        if (adminUnlocked) {
+            addSettingsSection(
+                    root,
+                    "PBX",
+                    "مدیریت PBX",
+                    pbxSummary(),
+                    () -> showPbxCenter());
 
-        addSettingsSection(
-                root,
-                "⚙",
-                "پیشرفته",
-                "SIP • STUN • TURN • Smart Route • Failover",
-                () -> showSettings());
+            addSettingsSection(
+                    root,
+                    "🌐",
+                    "شبکه و اتصال",
+                    networkSummary(),
+                    () -> showSettings());
+
+            addSettingsSection(
+                    root,
+                    "🔒",
+                    "امنیت",
+                    securitySummary(),
+                    () -> showSettings());
+
+            addSettingsSection(
+                    root,
+                    "⚙",
+                    "تنظیمات پیشرفته",
+                    "SIP • STUN • TURN • Route • Failover",
+                    () -> showSettings());
+
+            addSettingsSection(
+                    root,
+                    "🔓",
+                    "خروج از حالت مدیریت",
+                    "بازگشت به رابط ساده کاربر",
+                    () -> {
+                        adminUnlocked = false;
+                        recreate();
+                    });
+        } else {
+            addSettingsSection(
+                    root,
+                    "🔐",
+                    "مدیریت",
+                    "فقط برای مدیر سیستم",
+                    () -> showAdminAccess());
+        }
 
         addSettingsSection(
                 root,
                 "ⓘ",
-                "درباره MOLIDO VoIP",
-                "Build " + BuildConfig.VERSION_NAME + " • Android",
+                "درباره MOLIDO",
+                "v" + BuildConfig.VERSION_NAME,
                 () -> showSettingsInfo(
-                        "درباره MOLIDO VoIP",
-                        "MOLIDO VoIP\\n"
-                                + "Version: " + BuildConfig.VERSION_NAME + "\\n\\n"
-                                + "Secure SIP • ICE/STUN/TURN • Smart Route • "
-                                + "Auto Reconnect • SIP Failover • SRTP"));
+                        "درباره MOLIDO",
+                        "MOLIDO VoIP\nVersion: " + BuildConfig.VERSION_NAME));
 
         new AlertDialog.Builder(this)
                 .setView(scroll)
                 .setNegativeButton("بستن", null)
                 .show();
+    }
+
+    private void showAdminAccess() {
+        String storedPin = null;
+        try {
+            storedPin = secureStore.getSecret("admin_pin");
+        } catch (Exception ignored) {}
+
+        if (storedPin == null || storedPin.isEmpty()) {
+            showAdminPinSetup();
+        } else {
+            showAdminPinLogin();
+        }
+    }
+
+    private void showAdminPinSetup() {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        EditText pin = field("PIN مدیریت - حداقل 4 رقم", "");
+        pin.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+
+        EditText confirm = field("تکرار PIN", "");
+        confirm.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+
+        form.addView(pin);
+        form.addView(confirm);
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle("فعال‌سازی مدیریت")
+                .setMessage("PIN فقط داخل SecureStore دستگاه ذخیره می‌شود.")
+                .setView(form)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("فعال‌سازی", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String a = pin.getText().toString().trim();
+                String b = confirm.getText().toString().trim();
+
+                if (a.length() < 4) {
+                    pin.setError("حداقل 4 رقم");
+                    return;
+                }
+                if (!a.equals(b)) {
+                    confirm.setError("PIN یکسان نیست.");
+                    return;
+                }
+
+                try {
+                    secureStore.putSecret("admin_pin", a);
+                    adminUnlocked = true;
+                    ad.dismiss();
+                    recreate();
+                } catch (Exception e) {
+                    showToast("ذخیره امن PIN ناموفق بود.");
+                }
+            });
+        });
+
+        ad.show();
+    }
+
+    private void showAdminPinLogin() {
+        EditText pin = field("PIN مدیریت", "");
+        pin.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle("ورود مدیر")
+                .setView(pin)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ورود", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String stored = null;
+                try {
+                    stored = secureStore.getSecret("admin_pin");
+                } catch (Exception ignored) {}
+
+                String entered = pin.getText().toString().trim();
+                if (stored == null || !stored.equals(entered)) {
+                    pin.setError("PIN نادرست است.");
+                    return;
+                }
+
+                adminUnlocked = true;
+                ad.dismiss();
+                recreate();
+            });
+        });
+
+        ad.show();
     }
 
     private void addSettingsSection(
@@ -2838,13 +2972,17 @@ public final class MainActivity extends Activity {
         else if ("GOOD".equals(profile)) label = "خوب";
         else if ("FAIR".equals(profile)) label = "متوسط";
         else label = "حالت حفظ صدا";
-        audioQuality.setText(
-                "Smart Audio • " + label
-                + " • " + score + "/100"
-                + " • Loss " + String.format(java.util.Locale.US, "%.1f%%", loss)
-                + " • Jitter " + Math.round(jitter) + "ms"
-                + " • RTT " + Math.round(rtt) + "ms"
-                + " • ↓" + Math.round(down) + " ↑" + Math.round(up) + " kbps");
+        if (adminUnlocked) {
+            audioQuality.setText(
+                    "Smart Audio • " + label
+                    + " • " + score + "/100"
+                    + " • Loss " + String.format(java.util.Locale.US, "%.1f%%", loss)
+                    + " • Jitter " + Math.round(jitter) + "ms"
+                    + " • RTT " + Math.round(rtt) + "ms"
+                    + " • ↓" + Math.round(down) + " ↑" + Math.round(up) + " kbps");
+        } else {
+            audioQuality.setText("کیفیت تماس • " + label);
+        }
     }
 
     private void toggleSpeaker() {
@@ -3008,8 +3146,8 @@ public final class MainActivity extends Activity {
             }
 
             registerButton.setEnabled(false);
-            registerButton.setText("Connecting…");
-            connectionStatus.setText("●  Connecting…");
+            registerButton.setText("در حال اتصال…");
+            connectionStatus.setText("●  در حال اتصال…");
             connectionStatus.setTextColor(Color.rgb(37, 99, 235));
             String mediaMode = prefs.getString("media_security", "REQUIRED")
                     .trim().toUpperCase(java.util.Locale.ROOT);
@@ -3043,7 +3181,7 @@ public final class MainActivity extends Activity {
 
         } catch (Exception e) {
             registerButton.setEnabled(true);
-            registerButton.setText("Register SIP");
+            registerButton.setText("اتصال");
             connectionStatus.setText("●  Failed • " + safeUiMessage(e.getMessage()));
             connectionStatus.setTextColor(Color.rgb(220, 38, 38));
         }
@@ -3061,7 +3199,7 @@ public final class MainActivity extends Activity {
                     (safeDetail.isEmpty() ? "" : " • " + safeDetail));
             connectionStatus.setTextColor(Color.rgb(16, 185, 129));
             registerButton.setEnabled(true);
-            registerButton.setText("Registered");
+            registerButton.setText("متصل");
         } else if ("Connecting".equals(state)
                 || "Refreshing".equals(state)) {
             connectionStatus.setText("●  " + state);
@@ -3079,7 +3217,7 @@ public final class MainActivity extends Activity {
                     (safeDetail.isEmpty() ? "" : " • " + safeDetail));
             connectionStatus.setTextColor(Color.rgb(107, 114, 128));
             registerButton.setEnabled(true);
-            registerButton.setText("Register SIP");
+            registerButton.setText("اتصال");
         }
     }
 
