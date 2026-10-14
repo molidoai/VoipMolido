@@ -23,3 +23,7 @@ GitHub Pages cannot operate a SIP registrar/media relay. Native Android APK, iOS
 
 ## Automatic updates (preview)
 The PWA now checks for new deployments when reopened and periodically while running; see `docs/UPDATES.md`. Android APK updates are specified but **not implemented** yet.
+
+
+## Android preview
+`android/` is a WebView Android app; `.github/workflows/android.yml` builds an APK via GitHub Actions. See `docs/ANDROID-KEYS-UPDATES.md` for safe signing and release updates.
