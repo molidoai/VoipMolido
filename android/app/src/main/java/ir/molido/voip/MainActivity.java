@@ -81,6 +81,10 @@ public final class MainActivity extends Activity {
     private boolean activeCallConnected = false;
     private long activeCallStartedAt = 0L;
     private boolean adminUnlocked = false;
+    private long adminUnlockedAt = 0L;
+    private static final long ADMIN_SESSION_MS = 10L * 60L * 1000L;
+    private static final int ADMIN_MAX_FAILED_ATTEMPTS = 5;
+    private static final long ADMIN_LOCKOUT_MS = 5L * 60L * 1000L;
 
     private static final class UpdateInfo {
         String tag = "";
@@ -864,6 +868,12 @@ public final class MainActivity extends Activity {
     }
 
     private void showSettingsHub() {
+        if (adminUnlocked && !isAdminSessionValid()) {
+            adminUnlocked = false;
+            adminUnlockedAt = 0L;
+            showToast("نشست مدیریت منقضی شد.");
+        }
+
         ScrollView scroll = new ScrollView(this);
 
         LinearLayout root = new LinearLayout(this);
@@ -951,6 +961,20 @@ public final class MainActivity extends Activity {
 
             addSettingsSection(
                     root,
+                    "👥",
+                    "کاربران و دسترسی",
+                    usersSummary(),
+                    () -> showUsersManager());
+
+            addSettingsSection(
+                    root,
+                    "🛡",
+                    "گزارش امنیت",
+                    auditSummary(),
+                    () -> showAuditLog());
+
+            addSettingsSection(
+                    root,
                     "🌐",
                     "شبکه و اتصال",
                     networkSummary(),
@@ -977,6 +1001,8 @@ public final class MainActivity extends Activity {
                     "بازگشت به رابط ساده کاربر",
                     () -> {
                         adminUnlocked = false;
+                        adminUnlockedAt = 0L;
+                        appendAudit("ADMIN_SESSION_END", "Admin mode closed");
                         recreate();
                     });
         } else {
@@ -1021,7 +1047,7 @@ public final class MainActivity extends Activity {
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), dp(8), dp(18), dp(8));
 
-        EditText pin = field("PIN مدیریت - حداقل 4 رقم", "");
+        EditText pin = field("PIN مدیریت - حداقل 6 رقم", "");
         pin.setInputType(
                 InputType.TYPE_CLASS_NUMBER
                         | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
@@ -1047,8 +1073,8 @@ public final class MainActivity extends Activity {
                 String a = pin.getText().toString().trim();
                 String b = confirm.getText().toString().trim();
 
-                if (a.length() < 4) {
-                    pin.setError("حداقل 4 رقم");
+                if (a.length() < 6) {
+                    pin.setError("حداقل 6 رقم");
                     return;
                 }
                 if (!a.equals(b)) {
@@ -1059,6 +1085,12 @@ public final class MainActivity extends Activity {
                 try {
                     secureStore.putSecret("admin_pin", a);
                     adminUnlocked = true;
+                    adminUnlockedAt = System.currentTimeMillis();
+                    prefs.edit()
+                            .putInt("admin_failed_attempts", 0)
+                            .putLong("admin_lockout_until", 0L)
+                            .apply();
+                    appendAudit("ADMIN_PIN_SETUP", "Admin PIN initialized");
                     ad.dismiss();
                     recreate();
                 } catch (Exception e) {
@@ -1071,6 +1103,19 @@ public final class MainActivity extends Activity {
     }
 
     private void showAdminPinLogin() {
+        long now = System.currentTimeMillis();
+        long lockoutUntil = prefs.getLong("admin_lockout_until", 0L);
+
+        if (lockoutUntil > now) {
+            long seconds = Math.max(1L, (lockoutUntil - now) / 1000L);
+            showSettingsInfo(
+                    "ورود مدیریت موقتاً قفل است",
+                    "به دلیل تلاش‌های ناموفق، ورود حدود "
+                            + seconds
+                            + " ثانیه دیگر باز می‌شود.");
+            return;
+        }
+
         EditText pin = field("PIN مدیریت", "");
         pin.setInputType(
                 InputType.TYPE_CLASS_NUMBER
@@ -1091,18 +1136,55 @@ public final class MainActivity extends Activity {
                 } catch (Exception ignored) {}
 
                 String entered = pin.getText().toString().trim();
+
                 if (stored == null || !stored.equals(entered)) {
-                    pin.setError("PIN نادرست است.");
+                    int failed = prefs.getInt("admin_failed_attempts", 0) + 1;
+
+                    SharedPreferences.Editor editor = prefs.edit()
+                            .putInt("admin_failed_attempts", failed);
+
+                    if (failed >= ADMIN_MAX_FAILED_ATTEMPTS) {
+                        editor.putLong(
+                                "admin_lockout_until",
+                                System.currentTimeMillis() + ADMIN_LOCKOUT_MS);
+                    }
+
+                    editor.apply();
+                    appendAudit("ADMIN_LOGIN_FAILED", "Failed admin PIN attempt");
+
+                    if (failed >= ADMIN_MAX_FAILED_ATTEMPTS) {
+                        ad.dismiss();
+                        showSettingsInfo(
+                                "ورود مدیریت قفل شد",
+                                "پس از چند تلاش ناموفق، ورود مدیریت برای 5 دقیقه قفل شد.");
+                    } else {
+                        pin.setError(
+                                "PIN نادرست است. تلاش باقی‌مانده: "
+                                        + (ADMIN_MAX_FAILED_ATTEMPTS - failed));
+                    }
                     return;
                 }
 
+                prefs.edit()
+                        .putInt("admin_failed_attempts", 0)
+                        .putLong("admin_lockout_until", 0L)
+                        .apply();
+
                 adminUnlocked = true;
+                adminUnlockedAt = System.currentTimeMillis();
+                appendAudit("ADMIN_LOGIN_SUCCESS", "Admin mode unlocked");
                 ad.dismiss();
                 recreate();
             });
         });
 
         ad.show();
+    }
+
+    private boolean isAdminSessionValid() {
+        return adminUnlocked
+                && adminUnlockedAt > 0L
+                && (System.currentTimeMillis() - adminUnlockedAt) < ADMIN_SESSION_MS;
     }
 
     private void addSettingsSection(
@@ -1177,6 +1259,569 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, 0, dp(8));
         parent.addView(card, lp);
+    }
+
+    private String usersSummary() {
+        int active = 0;
+        int total = 0;
+
+        try {
+            JSONArray users = new JSONArray(
+                    prefs.getString("rbac_users_json", "[]"));
+
+            total = users.length();
+
+            for (int i = 0; i < users.length(); i++) {
+                JSONObject user = users.optJSONObject(i);
+                if (user != null && user.optBoolean("active", true)) {
+                    active++;
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return total + " کاربر • " + active + " فعال";
+    }
+
+    private void showUsersManager() {
+        if (!requireAdminSession()) return;
+
+        JSONArray users = readRbacUsers();
+
+        String[] rows = new String[users.length() + 1];
+        rows[0] = "＋ افزودن کاربر";
+
+        for (int i = 0; i < users.length(); i++) {
+            JSONObject user = users.optJSONObject(i);
+            if (user == null) {
+                rows[i + 1] = "User";
+                continue;
+            }
+
+            String name = user.optString("name", "User");
+            String extension = user.optString("extension", "—");
+            String role = user.optString("role", "USER");
+            int securityLevel = user.optInt("securityLevel", 1);
+            boolean active = user.optBoolean("active", true);
+
+            rows[i + 1] =
+                    (active ? "● " : "○ ")
+                    + name
+                    + " • "
+                    + role
+                    + " • L"
+                    + securityLevel
+                    + " • Ext "
+                    + (extension.isEmpty() ? "—" : extension);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("کاربران و دسترسی")
+                .setItems(rows, (dialog, which) -> {
+                    if (which == 0) {
+                        showUserEditor(-1);
+                    } else {
+                        showUserActions(which - 1);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private JSONArray readRbacUsers() {
+        try {
+            return new JSONArray(prefs.getString("rbac_users_json", "[]"));
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    private void showUserActions(int index) {
+        if (!requireAdminSession()) return;
+
+        JSONArray users = readRbacUsers();
+        JSONObject user = users.optJSONObject(index);
+        if (user == null) return;
+
+        String name = user.optString("name", "User");
+        boolean active = user.optBoolean("active", true);
+
+        String[] actions = {
+                "ویرایش",
+                "نمایش دسترسی‌ها",
+                active ? "غیرفعال کردن" : "فعال کردن",
+                "حذف"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle(name)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        showUserEditor(index);
+                    } else if (which == 1) {
+                        showUserPermissions(index);
+                    } else if (which == 2) {
+                        setUserActive(index, !active);
+                    } else if (which == 3) {
+                        deleteRbacUser(index);
+                    }
+                })
+                .setNegativeButton("بستن", null)
+                .show();
+    }
+
+    private void showUserEditor(int index) {
+        if (!requireAdminSession()) return;
+
+        JSONArray users = readRbacUsers();
+        JSONObject existing = index >= 0 ? users.optJSONObject(index) : null;
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+        scroll.addView(form);
+
+        EditText name = field(
+                "نام کاربر",
+                existing == null ? "" : existing.optString("name", ""));
+
+        EditText extension = field(
+                "Extension",
+                existing == null ? "" : existing.optString("extension", ""));
+        extension.setInputType(InputType.TYPE_CLASS_PHONE);
+
+        EditText role = field(
+                "Role: USER / AGENT / OPERATOR / SUPERVISOR / ADMIN / OWNER",
+                existing == null ? "USER" : existing.optString("role", "USER"));
+
+        EditText securityLevel = field(
+                "Security Level: 1 / 2 / 3 / 4",
+                existing == null
+                        ? "1"
+                        : String.valueOf(existing.optInt("securityLevel", 1)));
+        securityLevel.setInputType(InputType.TYPE_CLASS_NUMBER);
+
+        EditText department = field(
+                "Department / Queue",
+                existing == null ? "" : existing.optString("department", ""));
+
+        EditText did = field(
+                "Assigned DID",
+                existing == null ? "" : existing.optString("did", ""));
+
+        form.addView(name);
+        form.addView(extension);
+        form.addView(role);
+        form.addView(securityLevel);
+        form.addView(department);
+        form.addView(did);
+
+        TextView note = new TextView(this);
+        note.setText(
+                "Role یک قالب دسترسی است. Security Level حساسیت امنیتی را مشخص می‌کند. "
+                        + "همه دسترسی‌ها Deny-by-default هستند.");
+        note.setTextSize(11f);
+        note.setTextColor(Color.GRAY);
+        note.setPadding(0, dp(10), 0, 0);
+        form.addView(note);
+
+        final JSONArray userList = users;
+
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle(index < 0 ? "افزودن کاربر" : "ویرایش کاربر")
+                .setView(scroll)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ذخیره", null)
+                .create();
+
+        ad.setOnShowListener(dialog -> {
+            ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String nameValue = name.getText().toString().trim();
+                String roleValue = role.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+
+                if (nameValue.isEmpty()) {
+                    name.setError("نام کاربر لازم است.");
+                    return;
+                }
+
+                if (!isValidRole(roleValue)) {
+                    role.setError("Role معتبر نیست.");
+                    return;
+                }
+
+                int level;
+                try {
+                    level = Integer.parseInt(
+                            securityLevel.getText().toString().trim());
+                } catch (Exception e) {
+                    securityLevel.setError("سطح 1 تا 4");
+                    return;
+                }
+
+                if (level < 1 || level > 4) {
+                    securityLevel.setError("سطح امنیت فقط 1 تا 4");
+                    return;
+                }
+
+                if (!roleLevelAllowed(roleValue, level)) {
+                    securityLevel.setError(
+                            "این Role با Security Level انتخاب‌شده سازگار نیست.");
+                    return;
+                }
+
+                try {
+                    JSONObject user = existing == null
+                            ? new JSONObject()
+                            : new JSONObject(existing.toString());
+
+                    String id = user.optString("id", "");
+                    if (id.isEmpty()) {
+                        id = "user_" + System.currentTimeMillis();
+                    }
+
+                    user.put("id", id);
+                    user.put("name", nameValue);
+                    user.put("extension",
+                            extension.getText().toString().trim());
+                    user.put("role", roleValue);
+                    user.put("securityLevel", level);
+                    user.put("department",
+                            department.getText().toString().trim());
+                    user.put("did",
+                            did.getText().toString().trim());
+
+                    if (!user.has("active")) user.put("active", true);
+
+                    user.put("permissions",
+                            rolePermissions(roleValue));
+
+                    JSONArray next = new JSONArray();
+
+                    for (int i = 0; i < userList.length(); i++) {
+                        if (i == index) {
+                            next.put(user);
+                        } else {
+                            JSONObject old = userList.optJSONObject(i);
+                            if (old != null) next.put(old);
+                        }
+                    }
+
+                    if (index < 0) next.put(user);
+
+                    prefs.edit()
+                            .putString("rbac_users_json", next.toString())
+                            .apply();
+
+                    appendAudit(
+                            index < 0 ? "USER_CREATED" : "USER_UPDATED",
+                            nameValue + " / " + roleValue + " / L" + level);
+
+                    ad.dismiss();
+                    showUsersManager();
+
+                } catch (Exception e) {
+                    showToast("ذخیره کاربر ناموفق بود.");
+                }
+            });
+        });
+
+        ad.show();
+    }
+
+    private boolean isValidRole(String role) {
+        return "USER".equals(role)
+                || "AGENT".equals(role)
+                || "OPERATOR".equals(role)
+                || "SUPERVISOR".equals(role)
+                || "ADMIN".equals(role)
+                || "OWNER".equals(role);
+    }
+
+    private boolean roleLevelAllowed(String role, int level) {
+        if ("OWNER".equals(role)) return level == 4;
+        if ("ADMIN".equals(role)) return level >= 3;
+        if ("SUPERVISOR".equals(role)) return level >= 2 && level <= 3;
+        if ("OPERATOR".equals(role)) return level >= 1 && level <= 2;
+        if ("AGENT".equals(role)) return level >= 1 && level <= 2;
+        return level == 1;
+    }
+
+    private JSONArray rolePermissions(String role) {
+        JSONArray p = new JSONArray();
+
+        addPermission(p, "calls.view_own");
+        addPermission(p, "contacts.use");
+
+        if ("AGENT".equals(role)
+                || "OPERATOR".equals(role)
+                || "SUPERVISOR".equals(role)
+                || "ADMIN".equals(role)
+                || "OWNER".equals(role)) {
+            addPermission(p, "queue.use");
+        }
+
+        if ("OPERATOR".equals(role)
+                || "SUPERVISOR".equals(role)
+                || "ADMIN".equals(role)
+                || "OWNER".equals(role)) {
+            addPermission(p, "voicemail.manage");
+        }
+
+        if ("SUPERVISOR".equals(role)
+                || "ADMIN".equals(role)
+                || "OWNER".equals(role)) {
+            addPermission(p, "calls.view_all");
+            addPermission(p, "reports.view");
+            addPermission(p, "users.view");
+        }
+
+        if ("ADMIN".equals(role)
+                || "OWNER".equals(role)) {
+            addPermission(p, "users.create");
+            addPermission(p, "users.edit");
+            addPermission(p, "users.disable");
+            addPermission(p, "pbx.view");
+            addPermission(p, "pbx.manage");
+            addPermission(p, "did.manage");
+            addPermission(p, "ivr.manage");
+            addPermission(p, "routing.manage");
+        }
+
+        if ("OWNER".equals(role)) {
+            addPermission(p, "trunk.manage");
+            addPermission(p, "security.manage");
+            addPermission(p, "roles.manage");
+            addPermission(p, "audit.view");
+        }
+
+        return p;
+    }
+
+    private void addPermission(JSONArray target, String value) {
+        target.put(value);
+    }
+
+    private boolean hasPermission(JSONObject user, String permission) {
+        if (user == null || permission == null || permission.isEmpty()) {
+            return false;
+        }
+
+        if (!user.optBoolean("active", true)) {
+            return false;
+        }
+
+        JSONArray permissions = user.optJSONArray("permissions");
+        if (permissions == null) return false;
+
+        for (int i = 0; i < permissions.length(); i++) {
+            if (permission.equals(permissions.optString(i, ""))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void showUserPermissions(int index) {
+        JSONArray users = readRbacUsers();
+        JSONObject user = users.optJSONObject(index);
+        if (user == null) return;
+
+        JSONArray permissions = user.optJSONArray("permissions");
+        StringBuilder text = new StringBuilder();
+
+        text.append("Role: ")
+                .append(user.optString("role", "USER"))
+                .append("\nSecurity Level: ")
+                .append(user.optInt("securityLevel", 1))
+                .append("\n\n");
+
+        if (permissions == null || permissions.length() == 0) {
+            text.append("هیچ دسترسی اضافی ندارد.");
+        } else {
+            for (int i = 0; i < permissions.length(); i++) {
+                text.append("✓ ")
+                        .append(permissions.optString(i, ""))
+                        .append("\n");
+            }
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(user.optString("name", "User"))
+                .setMessage(text.toString())
+                .setPositiveButton("باشه", null)
+                .show();
+    }
+
+    private void setUserActive(int index, boolean active) {
+        if (!requireAdminSession()) return;
+
+        JSONArray users = readRbacUsers();
+        JSONArray next = new JSONArray();
+        String changedName = "User";
+
+        try {
+            for (int i = 0; i < users.length(); i++) {
+                JSONObject old = users.optJSONObject(i);
+                if (old == null) continue;
+
+                JSONObject copy = new JSONObject(old.toString());
+
+                if (i == index) {
+                    copy.put("active", active);
+                    changedName = copy.optString("name", "User");
+                }
+
+                next.put(copy);
+            }
+
+            prefs.edit()
+                    .putString("rbac_users_json", next.toString())
+                    .apply();
+
+            appendAudit(
+                    active ? "USER_ENABLED" : "USER_DISABLED",
+                    changedName);
+
+            showUsersManager();
+
+        } catch (Exception e) {
+            showToast("تغییر وضعیت کاربر ناموفق بود.");
+        }
+    }
+
+    private void deleteRbacUser(int index) {
+        if (!requireAdminSession()) return;
+
+        JSONArray users = readRbacUsers();
+        JSONArray next = new JSONArray();
+        String deletedName = "User";
+
+        try {
+            for (int i = 0; i < users.length(); i++) {
+                JSONObject item = users.optJSONObject(i);
+                if (item == null) continue;
+
+                if (i == index) {
+                    deletedName = item.optString("name", "User");
+                    continue;
+                }
+
+                next.put(item);
+            }
+
+            prefs.edit()
+                    .putString("rbac_users_json", next.toString())
+                    .apply();
+
+            appendAudit("USER_DELETED", deletedName);
+            showUsersManager();
+
+        } catch (Exception e) {
+            showToast("حذف کاربر ناموفق بود.");
+        }
+    }
+
+    private boolean requireAdminSession() {
+        if (!isAdminSessionValid()) {
+            adminUnlocked = false;
+            adminUnlockedAt = 0L;
+            showToast("برای ادامه دوباره وارد حالت مدیریت شوید.");
+            showAdminAccess();
+            return false;
+        }
+
+        adminUnlockedAt = System.currentTimeMillis();
+        return true;
+    }
+
+    private void appendAudit(String action, String detail) {
+        try {
+            JSONArray current = new JSONArray(
+                    prefs.getString("security_audit_json", "[]"));
+
+            JSONObject event = new JSONObject();
+            event.put("time", System.currentTimeMillis());
+            event.put("action", action == null ? "" : action);
+            event.put("detail", detail == null ? "" : detail);
+
+            JSONArray next = new JSONArray();
+            next.put(event);
+
+            int limit = Math.min(current.length(), 99);
+            for (int i = 0; i < limit; i++) {
+                JSONObject old = current.optJSONObject(i);
+                if (old != null) next.put(old);
+            }
+
+            prefs.edit()
+                    .putString("security_audit_json", next.toString())
+                    .apply();
+
+        } catch (Exception ignored) {}
+    }
+
+    private String auditSummary() {
+        try {
+            JSONArray events = new JSONArray(
+                    prefs.getString("security_audit_json", "[]"));
+
+            return events.length() + " رویداد امنیتی محلی";
+        } catch (Exception e) {
+            return "بدون رویداد";
+        }
+    }
+
+    private void showAuditLog() {
+        if (!requireAdminSession()) return;
+
+        try {
+            JSONArray events = new JSONArray(
+                    prefs.getString("security_audit_json", "[]"));
+
+            if (events.length() == 0) {
+                showToast("هنوز رویداد امنیتی ثبت نشده است.");
+                return;
+            }
+
+            int count = Math.min(events.length(), 50);
+            String[] rows = new String[count];
+
+            java.text.SimpleDateFormat sdf =
+                    new java.text.SimpleDateFormat(
+                            "MM/dd HH:mm",
+                            java.util.Locale.getDefault());
+
+            for (int i = 0; i < count; i++) {
+                JSONObject event = events.optJSONObject(i);
+                if (event == null) {
+                    rows[i] = "Audit";
+                    continue;
+                }
+
+                long time = event.optLong("time", 0L);
+                String when = time > 0L
+                        ? sdf.format(new java.util.Date(time))
+                        : "";
+
+                rows[i] =
+                        when
+                        + " • "
+                        + event.optString("action", "")
+                        + " • "
+                        + event.optString("detail", "");
+            }
+
+            new AlertDialog.Builder(this)
+                    .setTitle("گزارش امنیت")
+                    .setItems(rows, null)
+                    .setNegativeButton("بستن", null)
+                    .show();
+
+        } catch (Exception e) {
+            showToast("خواندن گزارش امنیت ناموفق بود.");
+        }
     }
 
     private String accountSummary() {
