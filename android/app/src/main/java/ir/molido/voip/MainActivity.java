@@ -51,12 +51,17 @@ public final class MainActivity extends Activity {
     private static final String PREFS = "molido_voip_settings";
     private static final int REQ_MIC = 4102;
     private static final int REQ_CONTACTS = 4103;
+    private static final int REQ_INSTALL_UNKNOWN = 4104;
 
     private WebView web;
     private TextView updateStatus;
     private Button updateButton;
     private TextView updateCenterStatus;
     private Button updateCenterButton;
+    private long updateDownloadId = -1L;
+    private String pendingUpdateSha256 = "";
+    private android.net.Uri pendingInstallUri = null;
+    private android.content.BroadcastReceiver updateDownloadReceiver;
     private TextView connectionStatus;
     private TextView extensionLabel;
     private EditText dialInput;
@@ -104,12 +109,42 @@ public final class MainActivity extends Activity {
         String apkUrl = "";
         String publishedAt = "";
         long apkSize = 0L;
+        String apkSha256 = "";
         boolean updateAvailable = false;
     }
 
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+
+        updateDownloadReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(
+                    android.content.Context context,
+                    android.content.Intent intent) {
+                if (!android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE
+                        .equals(intent.getAction())) {
+                    return;
+                }
+                long id = intent.getLongExtra(
+                        android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+                if (id == updateDownloadId) {
+                    handleCompletedUpdateDownload(id);
+                }
+            }
+        };
+
+        android.content.IntentFilter updateFilter =
+                new android.content.IntentFilter(
+                        android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(
+                    updateDownloadReceiver,
+                    updateFilter,
+                    android.content.Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(updateDownloadReceiver, updateFilter);
+        }
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         secureStore = new SecureStore(this);
@@ -4637,6 +4672,11 @@ public final class MainActivity extends Activity {
                     info.apkUrl =
                             asset.optString("browser_download_url", "");
                     info.apkSize = asset.optLong("size", 0L);
+                    String digest = asset.optString("digest", "");
+                    if (digest.startsWith("sha256:")) {
+                        info.apkSha256 =
+                                digest.substring(7).toLowerCase();
+                    }
                     break;
                 }
             }
@@ -4645,7 +4685,8 @@ public final class MainActivity extends Activity {
         info.updateAvailable =
                 isNewer(info.tag, BuildConfig.VERSION_NAME)
                         && isSafeReleasePage(info.releasePage)
-                        && isSafeApkUrl(info.apkUrl);
+                        && isSafeApkUrl(info.apkUrl)
+                        && info.apkSha256.matches("[0-9a-f]{64}");
 
         return info;
     }
@@ -4674,12 +4715,174 @@ public final class MainActivity extends Activity {
                                         Intent.ACTION_VIEW,
                                         Uri.parse(info.releasePage))))
                 .setPositiveButton(
-                        "دانلود APK",
-                        (d, w) -> startActivity(
-                                new Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(info.apkUrl))))
+                        "دانلود و نصب",
+                        (d, w) -> downloadAndInstallUpdate(info))
                 .show();
+    }
+
+    private void downloadAndInstallUpdate(UpdateInfo info) {
+        if (!isSafeApkUrl(info.apkUrl)
+                || !info.apkSha256.matches("[0-9a-f]{64}")) {
+            showToast("اطلاعات امنیتی بروزرسانی معتبر نیست.");
+            return;
+        }
+
+        try {
+            android.app.DownloadManager dm =
+                    (android.app.DownloadManager)
+                            getSystemService(DOWNLOAD_SERVICE);
+
+            String filename =
+                    "MOLIDO-VOIP-" + info.tag + ".apk";
+
+            android.app.DownloadManager.Request request =
+                    new android.app.DownloadManager.Request(
+                            android.net.Uri.parse(info.apkUrl));
+            request.setTitle("MOLIDO VOIP " + info.tag);
+            request.setDescription("دانلود بروزرسانی رسمی");
+            request.setMimeType(
+                    "application/vnd.android.package-archive");
+            request.setNotificationVisibility(
+                    android.app.DownloadManager.Request
+                            .VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(false);
+            request.setDestinationInExternalFilesDir(
+                    this,
+                    android.os.Environment.DIRECTORY_DOWNLOADS,
+                    filename);
+
+            pendingUpdateSha256 = info.apkSha256;
+            pendingInstallUri = null;
+            updateDownloadId = dm.enqueue(request);
+
+            setStatus("در حال دانلود " + info.tag + " ...");
+            showToast("دانلود بروزرسانی شروع شد.");
+        } catch (Exception e) {
+            setStatus("شروع دانلود بروزرسانی ناموفق بود.");
+            showToast("دانلود شروع نشد.");
+        }
+    }
+
+    private void handleCompletedUpdateDownload(long downloadId) {
+        android.app.DownloadManager dm =
+                (android.app.DownloadManager)
+                        getSystemService(DOWNLOAD_SERVICE);
+
+        android.app.DownloadManager.Query query =
+                new android.app.DownloadManager.Query()
+                        .setFilterById(downloadId);
+
+        try (android.database.Cursor cursor = dm.query(query)) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                setStatus("وضعیت دانلود قابل بررسی نیست.");
+                return;
+            }
+
+            int status = cursor.getInt(
+                    cursor.getColumnIndexOrThrow(
+                            android.app.DownloadManager.COLUMN_STATUS));
+
+            if (status != android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                setStatus("دانلود بروزرسانی ناموفق بود.");
+                showToast("دانلود بروزرسانی کامل نشد.");
+                return;
+            }
+        } catch (Exception e) {
+            setStatus("بررسی دانلود ناموفق بود.");
+            return;
+        }
+
+        android.net.Uri apkUri =
+                dm.getUriForDownloadedFile(downloadId);
+
+        if (apkUri == null) {
+            setStatus("فایل بروزرسانی پیدا نشد.");
+            return;
+        }
+
+        setStatus("در حال تأیید امنیت فایل بروزرسانی...");
+
+        new Thread(() -> {
+            try {
+                String actual = sha256OfUri(apkUri);
+                if (!actual.equalsIgnoreCase(pendingUpdateSha256)) {
+                    setStatus("بروزرسانی رد شد • SHA-256 نامعتبر");
+                    showToast("بررسی امنیت APK ناموفق بود.");
+                    return;
+                }
+
+                pendingInstallUri = apkUri;
+                setStatus("دانلود و بررسی امنیتی کامل شد.");
+                runOnUiThread(() -> requestUpdateInstall(apkUri));
+            } catch (Exception e) {
+                setStatus("بررسی SHA-256 بروزرسانی ناموفق بود.");
+            }
+        }).start();
+    }
+
+    private String sha256OfUri(android.net.Uri uri) throws Exception {
+        java.security.MessageDigest digest =
+                java.security.MessageDigest.getInstance("SHA-256");
+
+        try (java.io.InputStream in =
+                     getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                throw new java.io.IOException("APK stream unavailable");
+            }
+
+            byte[] buffer = new byte[8192];
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, n);
+            }
+        }
+
+        StringBuilder hex = new StringBuilder(64);
+        for (byte b : digest.digest()) {
+            hex.append(String.format(
+                    java.util.Locale.US, "%02x", b & 0xff));
+        }
+        return hex.toString();
+    }
+
+    private void requestUpdateInstall(android.net.Uri apkUri) {
+        if (android.os.Build.VERSION.SDK_INT >= 26
+                && !getPackageManager().canRequestPackageInstalls()) {
+            pendingInstallUri = apkUri;
+            showToast("اجازه نصب از این منبع را فعال کن.");
+
+            android.content.Intent settingsIntent =
+                    new android.content.Intent(
+                            android.provider.Settings
+                                    .ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            android.net.Uri.parse(
+                                    "package:" + getPackageName()));
+            startActivityForResult(
+                    settingsIntent,
+                    REQ_INSTALL_UNKNOWN);
+            return;
+        }
+
+        launchPackageInstaller(apkUri);
+    }
+
+    private void launchPackageInstaller(android.net.Uri apkUri) {
+        try {
+            android.content.Intent install =
+                    new android.content.Intent(
+                            android.content.Intent.ACTION_VIEW);
+            install.setDataAndType(
+                    apkUri,
+                    "application/vnd.android.package-archive");
+            install.addFlags(
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(install);
+            setStatus("آماده نصب • تأیید نهایی با Android");
+        } catch (Exception e) {
+            setStatus("باز کردن نصب‌کننده Android ناموفق بود.");
+            showToast("نصب‌کننده باز نشد.");
+        }
     }
 
     private boolean isSafeReleasePage(String value) {
@@ -4811,6 +5014,27 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQ_INSTALL_UNKNOWN
+                && pendingInstallUri != null) {
+            if (android.os.Build.VERSION.SDK_INT < 26
+                    || getPackageManager()
+                            .canRequestPackageInstalls()) {
+                android.net.Uri uri = pendingInstallUri;
+                pendingInstallUri = null;
+                launchPackageInstaller(uri);
+            } else {
+                showToast("اجازه نصب بروزرسانی فعال نشد.");
+            }
+        }
+    }
+
+    @Override
     public void onBackPressed() {
         if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
@@ -4818,6 +5042,12 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try {
+            if (updateDownloadReceiver != null) {
+                unregisterReceiver(updateDownloadReceiver);
+            }
+        } catch (Exception ignored) {
+        }
         try {
             if (connectivityManager != null) connectivityManager.stop();
         } catch (Exception ignored) {
