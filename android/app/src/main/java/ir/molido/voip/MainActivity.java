@@ -69,8 +69,8 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         secureStore = new SecureStore(this);
         sipManager = new SipRegistrationManager(this,
-                (state, detail, success) -> runOnUiThread(() ->
-                        updateSipRegistrationUi(state, detail, success)));
+                (regState, detail, success) -> runOnUiThread(() ->
+                        updateSipRegistrationUi(regState, detail, success)));
         darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
