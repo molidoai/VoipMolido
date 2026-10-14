@@ -799,6 +799,10 @@ public final class MainActivity extends Activity {
                 "Smart Route: AUTO / DIRECT / RELAY",
                 prefs.getString("route_mode", "AUTO"));
 
+        EditText mediaSecurity = field(
+                "Secure Media: REQUIRED / PREFERRED / OFF",
+                prefs.getString("media_security", "REQUIRED"));
+
         EditText sipUsername = field("SIP Username",
                 prefs.getString("sip_username", ""));
 
@@ -831,6 +835,7 @@ public final class MainActivity extends Activity {
         form.addView(turnPassword);
         form.addView(turnTransport);
         form.addView(routeMode);
+        form.addView(mediaSecurity);
         form.addView(sipUsername);
         form.addView(sipPassword);
         form.addView(transport);
@@ -897,6 +902,15 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
+                String mediaSecurityValue = mediaSecurity.getText().toString()
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+                if (!mediaSecurityValue.equals("REQUIRED")
+                        && !mediaSecurityValue.equals("PREFERRED")
+                        && !mediaSecurityValue.equals("OFF")) {
+                    mediaSecurity.setError("Secure Media فقط REQUIRED، PREFERRED یا OFF");
+                    return;
+                }
+
                 if (!turnTransportValue.equals("OFF")
                         && (turnServer.getText().toString().trim().isEmpty()
                         || turnUsername.getText().toString().trim().isEmpty()
@@ -932,6 +946,7 @@ public final class MainActivity extends Activity {
                         .putString("turn_username", turnUsername.getText().toString().trim())
                         .putString("turn_transport", turnTransportValue)
                         .putString("route_mode", routeModeValue)
+                        .putString("media_security", mediaSecurityValue)
                         .putString("sip_username", sipUsername.getText().toString().trim())
                         .putString("sip_transport", transportValue)
                         .putString("display_name", displayName.getText().toString().trim())
@@ -1125,6 +1140,11 @@ public final class MainActivity extends Activity {
             registerButton.setText("Connecting…");
             connectionStatus.setText("●  Connecting…");
             connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+            String mediaMode = prefs.getString("media_security", "REQUIRED")
+                    .trim().toUpperCase(java.util.Locale.ROOT);
+            if (audioQuality != null) {
+                audioQuality.setText("Secure Media • " + mediaMode + " • SRTP");
+            }
 
             sipManager.setBackupRegistrar(
                     prefs.getString("sip_backup_registrar", "").trim());
@@ -1140,6 +1160,9 @@ public final class MainActivity extends Activity {
 
             sipManager.setRouteMode(
                     prefs.getString("route_mode", "AUTO").trim());
+
+            sipManager.setMediaSecurityMode(
+                    prefs.getString("media_security", "REQUIRED").trim());
 
             sipManager.register(
                     registrar,

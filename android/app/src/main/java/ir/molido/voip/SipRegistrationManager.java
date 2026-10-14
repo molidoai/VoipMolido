@@ -13,6 +13,7 @@ import org.linphone.core.CallStats;
 import org.linphone.core.Core;
 import org.linphone.core.CoreListenerStub;
 import org.linphone.core.Factory;
+import org.linphone.core.MediaEncryption;
 import org.linphone.core.NatPolicy;
 import org.linphone.core.PayloadType;
 import org.linphone.core.RegistrationState;
@@ -70,6 +71,7 @@ public final class SipRegistrationManager {
     private String cachedUsername = "";
     private String cachedPassword = "";
     private String cachedTransport = "TLS";
+    private String mediaSecurityMode = "REQUIRED";
 
     private final CoreListenerStub coreListener = new CoreListenerStub() {
         @Override
@@ -228,6 +230,19 @@ public final class SipRegistrationManager {
         } else if (!wasReachable && !manualUnregister && !cachedUsername.isEmpty()) {
             reconnectAttempt = 0;
             scheduleReconnect("Network restored");
+        }
+    }
+
+    public synchronized void setMediaSecurityMode(String mode) {
+        String normalized = clean(mode).toUpperCase(java.util.Locale.ROOT);
+        if (!"REQUIRED".equals(normalized)
+                && !"PREFERRED".equals(normalized)
+                && !"OFF".equals(normalized)) {
+            normalized = "REQUIRED";
+        }
+        mediaSecurityMode = normalized;
+        if (core != null && currentCall == null) {
+            configureSecureMedia(core);
         }
     }
 
@@ -600,6 +615,26 @@ public final class SipRegistrationManager {
                     turnUsername, null, turnPassword, null, null, null);
             core.addAuthInfo(turnAuth);
         } catch (Exception ignored) {
+        }
+    }
+
+    private void configureSecureMedia(Core targetCore) {
+        try {
+            if ("OFF".equals(mediaSecurityMode)) {
+                targetCore.setMediaEncryption(MediaEncryption.None);
+                targetCore.setMediaEncryptionMandatory(false);
+                return;
+            }
+
+            int result = targetCore.setMediaEncryption(MediaEncryption.SRTP);
+            if (result != 0) {
+                throw new IllegalStateException("SRTP policy could not be applied");
+            }
+
+            targetCore.setMediaEncryptionMandatory(
+                    "REQUIRED".equals(mediaSecurityMode));
+        } catch (RuntimeException e) {
+            if ("REQUIRED".equals(mediaSecurityMode)) throw e;
         }
     }
 
