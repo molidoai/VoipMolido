@@ -45,6 +45,7 @@ public final class MainActivity extends Activity {
     private TextView connectionStatus;
     private TextView extensionLabel;
     private EditText dialInput;
+    private boolean darkMode;
     private SharedPreferences prefs;
 
     private static final class UpdateInfo {
@@ -60,13 +61,14 @@ public final class MainActivity extends Activity {
     public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        darkMode = prefs.getBoolean("dark_mode", false);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-        root.setBackgroundColor(Color.rgb(246, 248, 252));
+        root.setBackgroundColor(darkMode ? Color.rgb(17, 24, 39) : Color.rgb(246, 248, 252));
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
@@ -123,9 +125,16 @@ public final class MainActivity extends Activity {
         extensionLabel.setPadding(0, dp(5), 0, dp(3));
 
         connectionStatus = new TextView(this);
-        connectionStatus.setText("●  آماده برای اتصال SIP");
+        String serverReady = prefs.getString("server", "");
+        String extReady = prefs.getString("extension", "");
+        boolean profileReady = !serverReady.isEmpty() && !extReady.isEmpty();
+        connectionStatus.setText(profileReady
+                ? "●  پروفایل آماده • SIP هنوز متصل نشده"
+                : "●  تنظیمات اتصال ناقص");
         connectionStatus.setTextSize(12f);
-        connectionStatus.setTextColor(Color.rgb(37, 99, 235));
+        connectionStatus.setTextColor(profileReady
+                ? Color.rgb(16, 185, 129)
+                : Color.rgb(245, 158, 11));
 
         statusCard.addView(profileTitle);
         statusCard.addView(extensionLabel);
@@ -254,6 +263,37 @@ public final class MainActivity extends Activity {
 
         dashboard.addView(quickActions);
 
+        TextView historyTitle = new TextView(this);
+        historyTitle.setText("تماس‌های اخیر");
+        historyTitle.setTextSize(15f);
+        historyTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        historyTitle.setTextColor(darkMode ? Color.WHITE : Color.rgb(17, 24, 39));
+        historyTitle.setPadding(dp(2), dp(14), 0, dp(7));
+        dashboard.addView(historyTitle);
+
+        LinearLayout historyCard = new LinearLayout(this);
+        historyCard.setOrientation(LinearLayout.VERTICAL);
+        historyCard.setPadding(dp(14), dp(10), dp(14), dp(10));
+        historyCard.setBackground(roundedBg(
+                darkMode ? "#1F2937" : "#FFFFFF",
+                18,
+                darkMode ? "#374151" : "#E5E7EB"));
+
+        TextView h1 = new TextView(this);
+        h1.setText("هنوز تماس واقعی ثبت نشده است");
+        h1.setTextSize(13f);
+        h1.setTextColor(darkMode ? Color.rgb(229, 231, 235) : Color.rgb(55, 65, 81));
+
+        TextView h2 = new TextView(this);
+        h2.setText("پس از فعال شدن SIP، سه تماس آخر اینجا نمایش داده می‌شود.");
+        h2.setTextSize(11f);
+        h2.setTextColor(Color.rgb(156, 163, 175));
+        h2.setPadding(0, dp(3), 0, 0);
+
+        historyCard.addView(h1);
+        historyCard.addView(h2);
+        dashboard.addView(historyCard);
+
         TextView webTitle = new TextView(this);
         webTitle.setText("پنل وب MOLIDO");
         webTitle.setTextSize(13f);
@@ -274,7 +314,7 @@ public final class MainActivity extends Activity {
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(12), dp(9), dp(12), dp(9));
-        footer.setBackground(roundedBg("#FFFFFF", 22, null));
+        footer.setBackground(roundedBg(darkMode ? "#111827" : "#FFFFFF", 22, null));
         footer.setElevation(dp(8));
 
         LinearLayout top = new LinearLayout(this);
@@ -284,7 +324,7 @@ public final class MainActivity extends Activity {
         TextView version = new TextView(this);
         version.setText("MOLIDO VOIP  •  v" + BuildConfig.VERSION_NAME);
         version.setTextSize(12f);
-        version.setTextColor(Color.rgb(55, 65, 81));
+        version.setTextColor(darkMode ? Color.rgb(229, 231, 235) : Color.rgb(55, 65, 81));
         version.setTypeface(Typeface.DEFAULT_BOLD);
 
         Button qrButton = new Button(this);
@@ -301,9 +341,20 @@ public final class MainActivity extends Activity {
         styleSecondaryButton(settingsButton);
         settingsButton.setOnClickListener(v -> showSettings());
 
+        Button themeButton = new Button(this);
+        themeButton.setText(darkMode ? "روشن" : "تیره");
+        themeButton.setTextSize(12f);
+        themeButton.setAllCaps(false);
+        styleSecondaryButton(themeButton);
+        themeButton.setOnClickListener(v -> {
+            prefs.edit().putBoolean("dark_mode", !darkMode).apply();
+            recreate();
+        });
+
         top.addView(version, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         top.addView(qrButton);
+        top.addView(themeButton);
         top.addView(settingsButton);
 
         LinearLayout bottom = new LinearLayout(this);
@@ -313,9 +364,9 @@ public final class MainActivity extends Activity {
         updateStatus = new TextView(this);
         updateStatus.setText("وضعیت بروزرسانی: در انتظار بررسی");
         updateStatus.setTextSize(11f);
-        updateStatus.setTextColor(Color.rgb(75, 85, 99));
+        updateStatus.setTextColor(darkMode ? Color.rgb(209, 213, 219) : Color.rgb(75, 85, 99));
         updateStatus.setPadding(dp(10), dp(7), dp(10), dp(7));
-        updateStatus.setBackground(roundedBg("#F3F4F6", 14, null));
+        updateStatus.setBackground(roundedBg(darkMode ? "#1F2937" : "#F3F4F6", 14, null));
 
         updateButton = new Button(this);
         updateButton.setText("بررسی بروزرسانی");
