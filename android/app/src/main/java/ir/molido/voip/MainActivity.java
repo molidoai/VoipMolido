@@ -49,7 +49,16 @@ public final class MainActivity extends Activity {
                 conn.setRequestProperty("Accept", "application/vnd.github+json");
                 conn.setRequestProperty("User-Agent", "MOLIDO-VOIP-Android");
                 if (conn.getResponseCode() != 200) return;
-                byte[] data = conn.getInputStream().readNBytes(65536);
+                java.io.InputStream in = conn.getInputStream();
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int total = 0, n;
+                while ((n = in.read(buffer)) != -1 && total < 65536) {
+                    int take = Math.min(n, 65536 - total);
+                    out.write(buffer, 0, take);
+                    total += take;
+                }
+                byte[] data = out.toByteArray();
                 JSONObject release = new JSONObject(new String(data, java.nio.charset.StandardCharsets.UTF_8));
                 if (release.optBoolean("draft") || release.optBoolean("prerelease")) return;
                 String tag = release.optString("tag_name", "");
