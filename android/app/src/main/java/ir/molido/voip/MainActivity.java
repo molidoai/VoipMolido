@@ -195,11 +195,11 @@ public final class MainActivity extends Activity {
         darkMode = prefs.getBoolean("dark_mode", true);
 
         int bg = darkMode
-                ? Color.rgb(15, 23, 42)
+                ? Color.rgb(7, 16, 35)
                 : Color.rgb(248, 250, 252);
 
         int card = darkMode
-                ? Color.rgb(30, 41, 59)
+                ? Color.rgb(14, 29, 57)
                 : Color.WHITE;
 
         int primaryText = darkMode
@@ -226,8 +226,8 @@ public final class MainActivity extends Activity {
         identity.setOrientation(LinearLayout.VERTICAL);
 
         TextView brand = new TextView(this);
-        brand.setText("MOLIDO");
-        brand.setTextSize(24f);
+        brand.setText("◈ MOLIDO");
+        brand.setTextSize(26f);
         brand.setTypeface(Typeface.DEFAULT_BOLD);
         brand.setTextColor(Color.rgb(56, 189, 248));
 
@@ -288,8 +288,8 @@ public final class MainActivity extends Activity {
 
         connectionStatus.setText(
                 profileReady
-                        ? "Ready for Calls"
-                        : "حساب تلفن تنظیم نشده");
+                        ? "SIP: آماده اتصال"
+                        : "SIP: قطع");
 
         connectionStatus.setTextColor(
                 profileReady
@@ -444,7 +444,7 @@ public final class MainActivity extends Activity {
                         letters.isEmpty()
                                 ? digit
                                 : digit + "\n" + letters);
-                key.setTextSize(24f);
+                key.setTextSize(22f);
                 key.setTextColor(Color.WHITE);
                 key.setGravity(Gravity.CENTER);
                 key.setPadding(0, 0, 0, 0);
@@ -473,9 +473,9 @@ public final class MainActivity extends Activity {
                 LinearLayout.LayoutParams kp =
                         new LinearLayout.LayoutParams(
                                 0,
-                                dp(76),
+                                dp(66),
                                 1f);
-                kp.setMargins(dp(8), dp(2), dp(8), dp(2));
+                kp.setMargins(dp(6), dp(3), dp(6), dp(3));
                 keyRow.addView(key, kp);
             }
 
@@ -797,7 +797,7 @@ public final class MainActivity extends Activity {
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
         nav.setPadding(dp(4), dp(4), dp(4), dp(6));
-        nav.setBackgroundColor(Color.rgb(32, 32, 32));
+        nav.setBackgroundColor(Color.rgb(11, 25, 49));
 
         Button navContacts = new Button(this);
         navContacts.setText("👤\nمخاطبین");
@@ -812,7 +812,7 @@ public final class MainActivity extends Activity {
         navKeypad.setTextSize(10f);
         navKeypad.setAllCaps(false);
         navKeypad.setTextColor(Color.rgb(56, 189, 248));
-        navKeypad.setBackgroundColor(Color.rgb(66, 66, 66));
+        navKeypad.setBackgroundColor(Color.rgb(24, 55, 94));
         navKeypad.setOnClickListener(v -> dialInput.requestFocus());
 
         Button navRecents = new Button(this);
